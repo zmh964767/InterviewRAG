@@ -18,11 +18,20 @@ class BGEReranker:
         self._loaded = False
 
     def _ensure_loaded(self):
-        """懒加载模型（首次调用时加载）"""
+        """懒加载模型（仅在模型已下载时加载，不主动下载）"""
         if self._loaded:
             return
         self._loaded = True
         try:
+            import os
+            from pathlib import Path
+            # 检查模型是否已缓存（避免首次查询时下载 1.1GB）
+            cache_dir = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
+            model_dir = cache_dir / "hub" / f"models--{self.model_name.replace('/', '--')}"
+            if not model_dir.exists():
+                logger.warning(f"Re-ranker 模型未下载，跳过（首次使用需手动下载）")
+                return
+
             from sentence_transformers import CrossEncoder
             self.model = CrossEncoder(self.model_name)
             logger.info(f"Re-ranker 模型已加载: {self.model_name}")
