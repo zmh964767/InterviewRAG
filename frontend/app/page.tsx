@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -13,54 +13,70 @@ export default function Home() {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  // 用 ref 追踪是否正在切换对话，避免循环
+  const switchingRef = useRef(false)
 
   const {
-    conversations, currentId, currentConversation,
+    conversations, currentId,
     createConversation, switchConversation, deleteConversation, updateMessages,
   } = useConversations()
 
   const { messages, isLoading, error, sendMessage: rawSendMessage, clearMessages, loadMessages } = useChat()
 
-  // 当 currentConversation 变化时，加载对应消息
+  // 持久化：每次 AI 回答完成后保存
+  const lastMsgCountRef = useRef(0)
   useEffect(() => {
-    if (currentConversation) {
-      loadMessages(currentConversation.messages)
-    } else {
-      clearMessages()
-    }
-  }, [currentConversation]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // 持久化消息到当前对话
-  useEffect(() => {
-    if (currentId && messages.length > 0) {
+    if (switchingRef.current) return
+    // 只在消息数量增加且不是加载历史时持久化
+    if (currentId && messages.length > lastMsgCountRef.current && messages.length > 0) {
       updateMessages(messages)
     }
-  }, [messages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
+    lastMsgCountRef.current = messages.length
+  }, [messages.length, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // 发送消息：如果没有对话则先创建
+  // 发送消息
   const sendMessage = useCallback((content: string) => {
     if (conversations.length === 0 || !currentId) {
       createConversation()
     }
+    lastMsgCountRef.current = 0 // 重置计数
     rawSendMessage(content)
   }, [conversations.length, currentId, createConversation, rawSendMessage])
 
-  // 新建对话：创建新对话并清空消息
+  // 新建对话
   const handleNewChat = useCallback(() => {
     createConversation()
     clearMessages()
+    lastMsgCountRef.current = 0
   }, [createConversation, clearMessages])
 
-  // 重新生成最后一条回答
+  // 切换对话：直接加载历史消息
+  const handleSwitchConversation = useCallback((id: string) => {
+    switchingRef.current = true
+    switchConversation(id)
+    const conv = conversations.find((c) => c.id === id)
+    if (conv) {
+      loadMessages(conv.messages)
+      lastMsgCountRef.current = conv.messages.length
+    } else {
+      clearMessages()
+      lastMsgCountRef.current = 0
+    }
+    // 下一帧解除切换标记
+    requestAnimationFrame(() => { switchingRef.current = false })
+  }, [conversations, switchConversation, loadMessages, clearMessages])
+
+  // 重新生成
   const handleRegenerate = useCallback(() => {
     if (messages.length < 2) return
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
+      lastMsgCountRef.current = 0
       rawSendMessage(lastUserMsg.content)
     }
   }, [messages, rawSendMessage])
 
-  // 删除对话（带确认）
+  // 删除对话
   const handleDeleteConversation = useCallback((id: string) => {
     setDeleteConfirmId(id)
   }, [])
@@ -85,14 +101,13 @@ export default function Home() {
         conversations={conversations}
         currentId={currentId}
         onCreateConversation={handleNewChat}
-        onSwitchConversation={switchConversation}
+        onSwitchConversation={handleSwitchConversation}
         onDeleteConversation={handleDeleteConversation}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
         <header
-          className="h-14 px-6 flex items-center justify-between shrink-0 border-b"
+          className="h-14 px-6 flex items-center shrink-0 border-b"
           style={{ borderColor: 'var(--border)', background: 'rgba(250, 248, 245, 0.8)', backdropFilter: 'blur(12px)' }}
         >
           <div className="flex items-center gap-4">
@@ -150,10 +165,7 @@ export default function Home() {
             style={{ background: 'var(--cream)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
             onClick={(e) => e.stopPropagation()}
           >
-            <h3
-              className="text-base font-semibold mb-2"
-              style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}
-            >
+            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
               删除对话？
             </h3>
             <p className="text-sm mb-5" style={{ color: 'var(--ink-muted)' }}>
@@ -164,8 +176,6 @@ export default function Home() {
                 onClick={() => setDeleteConfirmId(null)}
                 className="px-4 py-2 text-sm rounded-lg transition-all"
                 style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper)' }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
               >
                 取消
               </button>
@@ -173,8 +183,6 @@ export default function Home() {
                 onClick={confirmDelete}
                 className="px-4 py-2 text-sm font-medium rounded-lg transition-all"
                 style={{ background: 'var(--accent)', color: 'var(--cream)' }}
-                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }}
-                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
               >
                 删除
               </button>
