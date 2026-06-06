@@ -23,23 +23,23 @@ export default function Home() {
 
   const { messages, isLoading, error, sendMessage: rawSendMessage, clearMessages, loadMessages } = useChat()
 
-  // 持久化：每次 AI 回答完成后保存
-  const lastMsgCountRef = useRef(0)
+  // 持久化：消息变化时保存（防抖）
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (switchingRef.current) return
-    // 只在消息数量增加且不是加载历史时持久化
-    if (currentId && messages.length > lastMsgCountRef.current && messages.length > 0) {
+    if (switchingRef.current || !currentId || messages.length === 0) return
+    // 防抖：停止更新 500ms 后保存，避免流式过程中频繁写入
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
       updateMessages(messages)
-    }
-    lastMsgCountRef.current = messages.length
-  }, [messages.length, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
+    }, 500)
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
+  }, [messages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 发送消息
   const sendMessage = useCallback((content: string) => {
     if (conversations.length === 0 || !currentId) {
       createConversation()
     }
-    lastMsgCountRef.current = 0 // 重置计数
     rawSendMessage(content)
   }, [conversations.length, currentId, createConversation, rawSendMessage])
 
@@ -47,7 +47,7 @@ export default function Home() {
   const handleNewChat = useCallback(() => {
     createConversation()
     clearMessages()
-    lastMsgCountRef.current = 0
+    // 无需重置
   }, [createConversation, clearMessages])
 
   // 切换对话：直接加载历史消息
@@ -57,10 +57,9 @@ export default function Home() {
     const conv = conversations.find((c) => c.id === id)
     if (conv) {
       loadMessages(conv.messages)
-      lastMsgCountRef.current = conv.messages.length
     } else {
       clearMessages()
-      lastMsgCountRef.current = 0
+      // 无需重置
     }
     // 下一帧解除切换标记
     requestAnimationFrame(() => { switchingRef.current = false })
@@ -71,7 +70,7 @@ export default function Home() {
     if (messages.length < 2) return
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
-      lastMsgCountRef.current = 0
+      // 无需重置
       rawSendMessage(lastUserMsg.content)
     }
   }, [messages, rawSendMessage])
