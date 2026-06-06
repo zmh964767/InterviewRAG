@@ -13,10 +13,15 @@ interface ChatHistoryProps {
 
 export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatHistoryProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const prevLenRef = useRef(messages.length)
 
+  // 只在消息数量增加时自动滚动（切换对话/加载历史不触发）
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+    if (messages.length > prevLenRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+    prevLenRef.current = messages.length
+  }, [messages.length])
 
   // Welcome screen
   if (messages.length === 0) {

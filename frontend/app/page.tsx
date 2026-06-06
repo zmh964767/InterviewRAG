@@ -50,8 +50,12 @@ export default function Home() {
     // 无需重置
   }, [createConversation, clearMessages])
 
-  // 切换对话：直接加载历史消息
+  // 切换对话：先保存当前消息，再加载历史
   const handleSwitchConversation = useCallback((id: string) => {
+    // 先保存当前对话的消息（不等防抖）
+    if (currentId && messages.length > 0) {
+      updateMessages(messages)
+    }
     switchingRef.current = true
     switchConversation(id)
     const conv = conversations.find((c) => c.id === id)
@@ -59,11 +63,10 @@ export default function Home() {
       loadMessages(conv.messages)
     } else {
       clearMessages()
-      // 无需重置
     }
     // 下一帧解除切换标记
     requestAnimationFrame(() => { switchingRef.current = false })
-  }, [conversations, switchConversation, loadMessages, clearMessages])
+  }, [conversations, currentId, messages, switchConversation, loadMessages, clearMessages, updateMessages])
 
   // 重新生成
   const handleRegenerate = useCallback(() => {
