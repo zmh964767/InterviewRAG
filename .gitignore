@@ -1,0 +1,40 @@
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data (large files)
+backend/data/chroma/
+backend/data/processed/
+*.db
+
+# Node
+node_modules/
+.next/
+out/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Trellis runtime
+.trellis/.developer
+.trellis/.runtime/
+.trellis/tasks/*/research/
+.trellis/tasks/*/implement.jsonl
+.trellis/tasks/*/check.jsonl
