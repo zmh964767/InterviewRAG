@@ -82,10 +82,9 @@ export function ChatInput({ onSend, isLoading }: ChatInputProps) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="输入你的面试问题..."
-            disabled={isLoading}
+            placeholder={isLoading ? "AI 正在回答中，你可以提前编辑下一个问题..." : "输入你的面试问题..."}
             rows={1}
-            className="flex-1 resize-none bg-transparent px-3 py-2 text-sm focus:outline-none disabled:opacity-50"
+            className="flex-1 resize-none bg-transparent px-3 py-2 text-sm focus:outline-none"
             style={{
               color: 'var(--ink)',
               fontFamily: 'var(--font-body)',
