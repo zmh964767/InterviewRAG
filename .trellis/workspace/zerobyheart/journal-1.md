@@ -53,3 +53,38 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: InterviewRAG 单元测试 + 体验细节修复
+
+**Date**: 2026-06-07
+**Task**: InterviewRAG 单元测试 + 体验细节修复
+**Branch**: `master`
+
+### Summary
+
+添加后端单元测试（MD解析器13个测试+API Mock测试+Retriever测试），修复输入框发送后不清空、回答中可提前编辑等体验细节
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `af57a77` | (see git log) |
+| `8d1cb79` | (see git log) |
+| `28ac338` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
