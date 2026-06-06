@@ -42,22 +42,26 @@ export function SourceCard({ source, index }: SourceCardProps) {
           </span>
         </div>
         <div className="flex items-center gap-2 shrink-0 ml-2">
-          {/* Score */}
-          <div className="w-10 h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${scorePercent}%`,
-                background: scorePercent >= 70 ? 'var(--success)' : scorePercent >= 50 ? 'var(--warning)' : 'var(--ink-muted)',
-              }}
-            />
-          </div>
-          <span
-            className="text-[10px] tabular-nums w-7 text-right"
-            style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}
-          >
-            {scorePercent}%
-          </span>
+          {/* Score - only show when reranker is active (scores > 10%) */}
+          {scorePercent > 10 && (
+            <>
+              <div className="w-10 h-1 rounded-full overflow-hidden" style={{ background: 'var(--border)' }}>
+                <div
+                  className="h-full rounded-full transition-all"
+                  style={{
+                    width: `${scorePercent}%`,
+                    background: scorePercent >= 70 ? 'var(--success)' : scorePercent >= 50 ? 'var(--warning)' : 'var(--ink-muted)',
+                  }}
+                />
+              </div>
+              <span
+                className="text-[10px] tabular-nums w-7 text-right"
+                style={{ fontFamily: 'var(--font-mono)', color: 'var(--ink-muted)' }}
+              >
+                {scorePercent}%
+              </span>
+            </>
+          )}
           <svg
             className="w-3 h-3 transition-transform"
             style={{ color: 'var(--ink-muted)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
