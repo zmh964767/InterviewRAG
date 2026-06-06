@@ -7,76 +7,101 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { useChat } from '@/hooks/useChat'
 import { useConversations } from '@/hooks/useConversations'
 import { getStats } from '@/lib/api'
-import type { StatsResponse } from '@/lib/types'
+import type { StatsResponse, Message } from '@/lib/types'
 
 export default function Home() {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
-  // 用 ref 追踪是否正在切换对话，避免循环
-  const switchingRef = useRef(false)
+  // 每个对话的消息存储
+  const messagesMapRef = useRef<Record<string, Message[]>>({})
+  // 当前显示的消息（从 Map 中读取）
+  const [displayMessages, setDisplayMessages] = useState<Message[]>([])
 
   const {
     conversations, currentId,
     createConversation, switchConversation, deleteConversation, updateMessages,
   } = useConversations()
 
-  const { messages, isLoading, error, sendMessage: rawSendMessage, clearMessages, loadMessages } = useChat()
+  // 消息更新回调：写入 Map 并同步显示
+  const handleMessageUpdate = useCallback((convId: string, msgs: Message[]) => {
+    messagesMapRef.current[convId] = msgs
+    if (convId === currentIdRef.current) {
+      setDisplayMessages(msgs)
+    }
+  }, [])
 
-  // 持久化：消息变化时保存（防抖）
+  // 获取指定对话的消息
+  const getMessages = useCallback((convId: string) => {
+    return messagesMapRef.current[convId] || []
+  }, [])
+
+  const { sendMessage: rawSendMessage, isLoading } = useChat({
+    onMessageUpdate: handleMessageUpdate,
+    getMessages,
+  })
+
+  const currentIdRef = useRef<string | null>(null)
+  currentIdRef.current = currentId
+
+  // 从 localStorage 恢复消息到 Map
+  useEffect(() => {
+    for (const conv of conversations) {
+      if (!messagesMapRef.current[conv.id] && conv.messages.length > 0) {
+        messagesMapRef.current[conv.id] = conv.messages
+      }
+    }
+    // 显示当前对话的消息
+    if (currentId) {
+      setDisplayMessages(messagesMapRef.current[currentId] || [])
+    }
+  }, [conversations, currentId])
+
+  // 防抖持久化到 localStorage
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (switchingRef.current || !currentId || messages.length === 0) return
-    // 防抖：停止更新 500ms 后保存，避免流式过程中频繁写入
+    if (!currentId || displayMessages.length === 0) return
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(() => {
-      updateMessages(messages)
+      updateMessages(displayMessages)
     }, 500)
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [messages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [displayMessages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 发送消息
   const sendMessage = useCallback((content: string) => {
-    if (conversations.length === 0 || !currentId) {
-      createConversation()
+    let convId = currentId
+    if (!convId || conversations.length === 0) {
+      convId = createConversation()
     }
-    rawSendMessage(content)
-  }, [conversations.length, currentId, createConversation, rawSendMessage])
+    if (convId) {
+      rawSendMessage(content, convId)
+    }
+  }, [currentId, conversations.length, createConversation, rawSendMessage])
 
   // 新建对话
   const handleNewChat = useCallback(() => {
     createConversation()
-    clearMessages()
-    // 无需重置
-  }, [createConversation, clearMessages])
+  }, [createConversation])
 
-  // 切换对话：先保存当前消息，再加载历史
+  // 切换对话
   const handleSwitchConversation = useCallback((id: string) => {
-    // 先保存当前对话的消息（不等防抖）
-    if (currentId && messages.length > 0) {
-      updateMessages(messages)
+    // 保存当前对话
+    if (currentId && displayMessages.length > 0) {
+      updateMessages(displayMessages)
     }
-    switchingRef.current = true
     switchConversation(id)
-    const conv = conversations.find((c) => c.id === id)
-    if (conv) {
-      loadMessages(conv.messages)
-    } else {
-      clearMessages()
-    }
-    // 下一帧解除切换标记
-    requestAnimationFrame(() => { switchingRef.current = false })
-  }, [conversations, currentId, messages, switchConversation, loadMessages, clearMessages, updateMessages])
+    setDisplayMessages(messagesMapRef.current[id] || [])
+  }, [currentId, displayMessages, switchConversation, updateMessages])
 
   // 重新生成
   const handleRegenerate = useCallback(() => {
-    if (messages.length < 2) return
-    const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
+    if (displayMessages.length < 2 || !currentId) return
+    const lastUserMsg = [...displayMessages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
-      // 无需重置
-      rawSendMessage(lastUserMsg.content)
+      rawSendMessage(lastUserMsg.content, currentId)
     }
-  }, [messages, rawSendMessage])
+  }, [displayMessages, currentId, rawSendMessage])
 
   // 删除对话
   const handleDeleteConversation = useCallback((id: string) => {
@@ -86,6 +111,7 @@ export default function Home() {
   const confirmDelete = useCallback(() => {
     if (deleteConfirmId) {
       deleteConversation(deleteConfirmId)
+      delete messagesMapRef.current[deleteConfirmId]
       setDeleteConfirmId(null)
     }
   }, [deleteConfirmId, deleteConversation])
@@ -132,30 +158,15 @@ export default function Home() {
         </header>
 
         <ChatHistory
-          messages={messages}
+          messages={displayMessages}
           isLoading={isLoading}
           onSend={sendMessage}
           onRegenerate={handleRegenerate}
         />
 
-        {error && (
-          <div
-            className="mx-6 mb-3 px-4 py-3 rounded-xl animate-fade-in"
-            style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)' }}
-          >
-            <div className="flex items-center gap-2">
-              <svg className="w-4 h-4 shrink-0" style={{ color: 'var(--accent)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <p className="text-sm" style={{ color: 'var(--accent)' }}>{error}</p>
-            </div>
-          </div>
-        )}
-
         <ChatInput onSend={sendMessage} isLoading={isLoading} />
       </div>
 
-      {/* 删除确认弹窗 */}
       {deleteConfirmId && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center"
