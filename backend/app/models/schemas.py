@@ -20,6 +20,7 @@ class QueryRequest(BaseModel):
     """查询请求"""
     question: str = Field(min_length=1, max_length=1000, description="用户问题")
     conversation_id: str | None = Field(default=None, description="对话 ID（多轮对话）")
+    chat_history: list[dict] | None = Field(default=None, description="对话历史")
     stream: bool = Field(default=False, description="是否流式返回")
 
 

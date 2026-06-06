@@ -40,11 +40,16 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
     onMessageUpdate(conversationId, [...currentMessages, userMessage, aiMessage])
 
     try {
+      // 构建对话历史（排除最后的 AI 占位消息）
+      const historyForApi = currentMessages
+        .filter((m) => m.content)
+        .map((m) => ({ role: m.role, content: m.content }))
+
       let fullContent = ''
       let sources: SourceRef[] = []
       let backendConvId: string | undefined = undefined
 
-      for await (const event of queryStream(content, backendConvId)) {
+      for await (const event of queryStream(content, backendConvId, historyForApi)) {
         if (event.error) throw new Error(event.error)
 
         if (event.content) {

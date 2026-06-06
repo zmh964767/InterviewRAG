@@ -34,7 +34,8 @@ async def query_endpoint(request: QueryRequest):
 
     # 获取或创建对话 ID
     conversation_id = request.conversation_id or str(uuid.uuid4())
-    history = conversations.get(conversation_id, [])
+    # 优先使用前端传来的对话历史，否则从服务端存储读取
+    history = request.chat_history or conversations.get(conversation_id, [])
 
     rag_service = _get_rag_service()
 

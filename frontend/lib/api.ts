@@ -32,6 +32,7 @@ export async function query(request: QueryRequest): Promise<QueryResponse> {
 export async function* queryStream(
   question: string,
   conversationId?: string,
+  chatHistory?: Array<{ role: string; content: string }>,
 ): AsyncGenerator<StreamEvent> {
   const res = await fetch(`${API_BASE}/api/query`, {
     method: 'POST',
@@ -39,6 +40,7 @@ export async function* queryStream(
     body: JSON.stringify({
       question,
       conversation_id: conversationId,
+      chat_history: chatHistory,
       stream: true,
     }),
   })

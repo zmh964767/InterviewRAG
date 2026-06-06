@@ -3,6 +3,7 @@
 export interface QueryRequest {
   question: string
   conversation_id?: string
+  chat_history?: Array<{ role: string; content: string }>
   stream?: boolean
 }
 
