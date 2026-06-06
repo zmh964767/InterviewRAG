@@ -14,13 +14,20 @@ export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
   const {
-    conversations, currentId, messages,
+    conversations, currentId,
     createConversation, switchConversation, deleteConversation, updateMessages,
   } = useConversations()
 
-  const { isLoading, error, sendMessage: rawSendMessage, clearMessages } = useChat()
+  const { messages, isLoading, error, sendMessage: rawSendMessage, clearMessages } = useChat()
 
-  // Sync messages from useChat to useConversations
+  // Sync messages to current conversation for persistence
+  useEffect(() => {
+    if (currentId && messages.length > 0) {
+      updateMessages(messages)
+    }
+  }, [messages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Send message: create conversation if needed, then send
   const sendMessage = useCallback((content: string) => {
     if (conversations.length === 0 || !currentId) {
       createConversation()
@@ -28,14 +35,7 @@ export default function Home() {
     rawSendMessage(content)
   }, [conversations.length, currentId, createConversation, rawSendMessage])
 
-  // After AI responds, save messages to current conversation
-  useEffect(() => {
-    if (messages.length > 0 && currentId) {
-      updateMessages(messages)
-    }
-  }, [messages, currentId, updateMessages])
-
-  // Clear messages should also clear the current conversation
+  // Clear messages
   const handleClear = useCallback(() => {
     clearMessages()
     if (currentId) {
@@ -48,12 +48,9 @@ export default function Home() {
     if (messages.length < 2) return
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
-      // Remove last AI message and resend
-      const newMessages = messages.slice(0, -1)
-      updateMessages(newMessages)
       rawSendMessage(lastUserMsg.content)
     }
-  }, [messages, updateMessages, rawSendMessage])
+  }, [messages, rawSendMessage])
 
   useEffect(() => {
     getStats().then(setStats).catch(() => {})
@@ -70,13 +67,7 @@ export default function Home() {
         onCreateConversation={createConversation}
         onSwitchConversation={(id) => {
           switchConversation(id)
-          const conv = conversations.find((c) => c.id === id)
-          if (conv) {
-            // Load conversation messages into useChat
-            clearMessages()
-            // We need to set messages directly - this is a limitation
-            // For now, switching conversations will show empty until we send a message
-          }
+          clearMessages()
         }}
         onDeleteConversation={deleteConversation}
       />
