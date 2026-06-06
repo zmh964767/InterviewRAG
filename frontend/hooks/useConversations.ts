@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from 'react'
 import type { Message } from '@/lib/types'
 
 const STORAGE_KEY = 'interviewrag_conversations'
+const ACTIVE_KEY = 'interviewrag_active_id'
 const MAX_TITLE_LENGTH = 15
 
 export interface Conversation {
@@ -52,7 +53,11 @@ export function useConversations() {
   useEffect(() => {
     const loaded = loadConversations()
     setConversations(loaded)
-    if (loaded.length > 0) {
+    // Restore active conversation ID
+    const savedActiveId = localStorage.getItem(ACTIVE_KEY)
+    if (savedActiveId && loaded.some(c => c.id === savedActiveId)) {
+      setCurrentId(savedActiveId)
+    } else if (loaded.length > 0) {
       setCurrentId(loaded[0].id)
     }
   }, [])
@@ -63,6 +68,13 @@ export function useConversations() {
       saveConversations(conversations)
     }
   }, [conversations])
+
+  // Save active ID when it changes
+  useEffect(() => {
+    if (currentId) {
+      localStorage.setItem(ACTIVE_KEY, currentId)
+    }
+  }, [currentId])
 
   const currentConversation = conversations.find((c) => c.id === currentId) || null
   const messages = currentConversation?.messages || []

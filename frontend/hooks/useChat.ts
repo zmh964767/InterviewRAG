@@ -93,11 +93,19 @@ export function useChat() {
     conversationIdRef.current = undefined
   }, [])
 
+  // 加载历史消息（切换对话时使用）
+  const loadMessages = useCallback((history: Message[]) => {
+    setMessages(history)
+    setError(null)
+    conversationIdRef.current = undefined
+  }, [])
+
   return {
     messages,
     isLoading,
     error,
     sendMessage,
     clearMessages,
+    loadMessages,
   }
 }

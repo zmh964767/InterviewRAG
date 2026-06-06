@@ -12,22 +12,32 @@ import type { StatsResponse } from '@/lib/types'
 export default function Home() {
   const [stats, setStats] = useState<StatsResponse | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
   const {
-    conversations, currentId,
+    conversations, currentId, currentConversation,
     createConversation, switchConversation, deleteConversation, updateMessages,
   } = useConversations()
 
-  const { messages, isLoading, error, sendMessage: rawSendMessage, clearMessages } = useChat()
+  const { messages, isLoading, error, sendMessage: rawSendMessage, clearMessages, loadMessages } = useChat()
 
-  // Sync messages to current conversation for persistence
+  // 当 currentConversation 变化时，加载对应消息
+  useEffect(() => {
+    if (currentConversation) {
+      loadMessages(currentConversation.messages)
+    } else {
+      clearMessages()
+    }
+  }, [currentConversation]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 持久化消息到当前对话
   useEffect(() => {
     if (currentId && messages.length > 0) {
       updateMessages(messages)
     }
   }, [messages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Send message: create conversation if needed, then send
+  // 发送消息：如果没有对话则先创建
   const sendMessage = useCallback((content: string) => {
     if (conversations.length === 0 || !currentId) {
       createConversation()
@@ -35,7 +45,13 @@ export default function Home() {
     rawSendMessage(content)
   }, [conversations.length, currentId, createConversation, rawSendMessage])
 
-  // Clear messages
+  // 新建对话：创建新对话并清空消息
+  const handleNewChat = useCallback(() => {
+    createConversation()
+    clearMessages()
+  }, [createConversation, clearMessages])
+
+  // 清空当前对话消息
   const handleClear = useCallback(() => {
     clearMessages()
     if (currentId) {
@@ -43,7 +59,7 @@ export default function Home() {
     }
   }, [clearMessages, currentId, updateMessages])
 
-  // Regenerate last response
+  // 重新生成最后一条回答
   const handleRegenerate = useCallback(() => {
     if (messages.length < 2) return
     const lastUserMsg = [...messages].reverse().find((m) => m.role === 'user')
@@ -51,6 +67,18 @@ export default function Home() {
       rawSendMessage(lastUserMsg.content)
     }
   }, [messages, rawSendMessage])
+
+  // 删除对话（带确认）
+  const handleDeleteConversation = useCallback((id: string) => {
+    setDeleteConfirmId(id)
+  }, [])
+
+  const confirmDelete = useCallback(() => {
+    if (deleteConfirmId) {
+      deleteConversation(deleteConfirmId)
+      setDeleteConfirmId(null)
+    }
+  }, [deleteConfirmId, deleteConversation])
 
   useEffect(() => {
     getStats().then(setStats).catch(() => {})
@@ -64,12 +92,9 @@ export default function Home() {
         stats={stats}
         conversations={conversations}
         currentId={currentId}
-        onCreateConversation={createConversation}
-        onSwitchConversation={(id) => {
-          switchConversation(id)
-          clearMessages()
-        }}
-        onDeleteConversation={deleteConversation}
+        onCreateConversation={handleNewChat}
+        onSwitchConversation={switchConversation}
+        onDeleteConversation={handleDeleteConversation}
       />
 
       <div className="flex-1 flex flex-col min-w-0">
@@ -134,6 +159,51 @@ export default function Home() {
 
         <ChatInput onSend={sendMessage} isLoading={isLoading} />
       </div>
+
+      {/* 删除确认弹窗 */}
+      {deleteConfirmId && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: 'rgba(26, 22, 18, 0.3)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setDeleteConfirmId(null)}
+        >
+          <div
+            className="w-80 p-6 rounded-2xl animate-slide-up"
+            style={{ background: 'var(--cream)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3
+              className="text-base font-semibold mb-2"
+              style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}
+            >
+              删除对话？
+            </h3>
+            <p className="text-sm mb-5" style={{ color: 'var(--ink-muted)' }}>
+              此操作无法撤销，对话中的所有消息将被永久删除。
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeleteConfirmId(null)}
+                className="px-4 py-2 text-sm rounded-lg transition-all"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--paper)' }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+              >
+                取消
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="px-4 py-2 text-sm font-medium rounded-lg transition-all"
+                style={{ background: 'var(--accent)', color: 'var(--cream)' }}
+                onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }}
+                onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+              >
+                删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
