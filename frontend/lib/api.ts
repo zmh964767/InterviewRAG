@@ -10,7 +10,7 @@ import type {
   StreamEvent,
 } from './types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
 /** 普通查询 */
 export async function query(request: QueryRequest): Promise<QueryResponse> {

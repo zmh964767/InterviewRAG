@@ -7,42 +7,96 @@ import { ChatMessage } from './ChatMessage'
 interface ChatHistoryProps {
   messages: Message[]
   isLoading: boolean
+  onSend: (message: string) => void
+  onRegenerate?: () => void
 }
 
-export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
+export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatHistoryProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
-  // 自动滚动到底部
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Welcome screen
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
-          <div className="text-6xl mb-4">🤖</div>
-          <h2 className="text-xl font-semibold text-gray-700 mb-2">
-            InterviewRAG 面试助手
-          </h2>
-          <p className="text-gray-500 text-sm max-w-md">
-            基于 RAG 的面试题库问答系统。输入你的面试问题，
-            我会从知识库中检索相关内容并给出专业回答。
+      <div className="flex-1 flex items-center justify-center p-6">
+        <div className="text-center max-w-xl animate-fade-in">
+          {/* Decorative line */}
+          <div className="flex items-center justify-center gap-3 mb-8">
+            <div className="h-px w-12" style={{ background: 'var(--border)' }} />
+            <svg className="w-5 h-5" style={{ color: 'var(--accent)' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            <div className="h-px w-12" style={{ background: 'var(--border)' }} />
+          </div>
+
+          {/* Title */}
+          <h1
+            className="text-4xl mb-3 tracking-tight stagger-1 animate-slide-up"
+            style={{ fontFamily: 'var(--font-display)', fontWeight: 300, color: 'var(--ink)' }}
+          >
+            InterviewRAG
+          </h1>
+          <p
+            className="text-sm mb-10 stagger-2 animate-slide-up"
+            style={{ color: 'var(--ink-muted)', maxWidth: '28rem', margin: '0 auto 2.5rem' }}
+          >
+            基于 RAG 的智能面试题库问答系统<br />
+            输入你的面试问题，获得专业回答
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
+
+          {/* Feature grid */}
+          <div className="grid grid-cols-3 gap-6 mb-10 stagger-3 animate-slide-up">
+            {[
+              { icon: '01', title: '语义检索', desc: '混合检索策略' },
+              { icon: '02', title: '来源引用', desc: '答案可追溯' },
+              { icon: '03', title: '多轮对话', desc: '上下文连贯' },
+            ].map((f) => (
+              <div key={f.icon} className="text-center">
+                <div className="text-xs font-medium mb-2 tracking-widest" style={{ color: 'var(--accent)', fontFamily: 'var(--font-mono)' }}>
+                  {f.icon}
+                </div>
+                <div className="text-sm font-medium mb-0.5" style={{ color: 'var(--ink)' }}>{f.title}</div>
+                <div className="text-xs" style={{ color: 'var(--ink-muted)' }}>{f.desc}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Divider */}
+          <div className="flex items-center gap-4 mb-8 stagger-4 animate-slide-up">
+            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+            <span className="text-xs" style={{ color: 'var(--ink-muted)', letterSpacing: '0.1em' }}>试试这些</span>
+            <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+          </div>
+
+          {/* Quick start - clickable */}
+          <div className="flex flex-wrap justify-center gap-3 stagger-4 animate-slide-up">
             {[
               'Transformer 自注意力机制',
               'RAG 的基本流程',
               'RLHF 训练流程',
-              'MoE 是如何工作的',
+              'MoE 如何工作',
             ].map((q) => (
-              <span
+              <button
                 key={q}
-                className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-full text-xs
-                           hover:bg-gray-200 cursor-pointer transition-colors"
+                onClick={() => onSend(q)}
+                className="px-5 py-2 text-sm rounded-full transition-all"
+                style={{ border: '1px solid var(--border)', color: 'var(--ink-light)', background: 'var(--cream)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--accent)'
+                  e.currentTarget.style.color = 'var(--accent)'
+                  e.currentTarget.style.background = 'var(--accent-soft)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderColor = 'var(--border)'
+                  e.currentTarget.style.color = 'var(--ink-light)'
+                  e.currentTarget.style.background = 'var(--cream)'
+                }}
               >
                 {q}
-              </span>
+              </button>
             ))}
           </div>
         </div>
@@ -50,26 +104,44 @@ export function ChatHistory({ messages, isLoading }: ChatHistoryProps) {
     )
   }
 
+  // Messages
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
-      <div className="max-w-3xl mx-auto space-y-4">
-        {messages.map((message) => (
-          <ChatMessage key={message.id} message={message} />
-        ))}
-        {isLoading && messages[messages.length - 1]?.content === '' && (
-          <div className="flex justify-start">
-            <div className="bg-gray-100 rounded-2xl px-4 py-3">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+    <div className="flex-1 overflow-y-auto">
+      <div className="max-w-3xl mx-auto px-6 py-8">
+        {messages.map((message, index) => {
+          const isLastAssistant = message.role === 'assistant' && index === messages.length - 1
+          return (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              isStreaming={isLastAssistant && isLoading}
+              onRegenerate={isLastAssistant ? onRegenerate : undefined}
+            />
+          )
+        })}
+
+        {/* Loading */}
+        {isLoading && messages.length > 0 && messages[messages.length - 1]?.role === 'user' && (
+          <div className="flex gap-4 animate-fade-in mb-8">
+            <div className="shrink-0 w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--ink)' }}>
+              <span className="text-xs" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)' }}>R</span>
+            </div>
+            <div className="flex-1">
+              <div
+                className="inline-flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
+                style={{ background: 'var(--paper)', color: 'var(--ink-muted)', border: '1px solid var(--border-subtle)' }}
+              >
                 <div className="flex gap-1">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.1s]" />
-                  <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0.2s]" />
+                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--ink-muted)', animationDelay: '-0.3s' }} />
+                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--ink-muted)', animationDelay: '-0.15s' }} />
+                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--ink-muted)' }} />
                 </div>
-                正在检索知识库...
+                <span className="text-xs">检索知识库中...</span>
               </div>
             </div>
           </div>
         )}
+
         <div ref={bottomRef} />
       </div>
     </div>
