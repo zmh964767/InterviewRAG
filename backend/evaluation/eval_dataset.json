@@ -1,0 +1,67 @@
+[
+  {
+    "question": "Transformer 的自注意力机制是如何工作的？",
+    "type": "recall",
+    "ground_truth": "自注意力机制通过计算查询(Query)、键(Key)、值(Value)之间的注意力权重来捕捉序列中的依赖关系。具体步骤包括：1）将输入通过线性变换得到Q、K、V；2）计算注意力分数 QK^T / sqrt(d_k)；3）通过 softmax 归一化得到注意力权重；4）将权重与V相乘得到输出。多头注意力允许模型同时关注不同位置的不同表示子空间。"
+  },
+  {
+    "question": "请介绍 RAG 的基本流程",
+    "type": "recall",
+    "ground_truth": "RAG（检索增强生成）的基本流程包括：1）文档解析和分块；2）向量化并存入向量数据库；3）用户提问时进行语义检索，找到相关文档片段；4）将检索到的上下文与用户问题一起输入LLM；5）LLM基于检索到的信息生成回答。核心优势是让LLM的回答基于真实文档，减少幻觉。"
+  },
+  {
+    "question": "RLHF 的训练流程是怎样的？",
+    "type": "recall",
+    "ground_truth": "RLHF（人类反馈强化学习）包含三个阶段：1）监督微调（SFT）：用高质量的人类标注数据微调基础模型；2）奖励模型训练：收集人类对模型输出的偏好排序，训练奖励模型；3）PPO强化学习优化：使用奖励模型的打分作为反馈信号，通过PPO算法优化策略模型。"
+  },
+  {
+    "question": "MoE 是如何工作的？",
+    "type": "recall",
+    "ground_truth": "MoE（混合专家模型）通过门控网络动态选择专家子网络处理输入。每个专家负责处理输入的不同部分，门控网络根据输入特征决定激活哪些专家。这使得模型可以在增加参数量的同时保持计算量可控，实现高效扩展。"
+  },
+  {
+    "question": "LoRA 微调的原理是什么？",
+    "type": "recall",
+    "ground_truth": "LoRA（低秩适配）通过在预训练权重矩阵旁边添加低秩分解矩阵来进行微调。具体做法是将权重更新分解为两个低秩矩阵 A 和 B 的乘积，只训练这两个小矩阵，而冻结原始权重。这大大减少了需要训练的参数量，同时保持了较好的微调效果。"
+  },
+  {
+    "question": "大模型如何处理长文本输入？",
+    "type": "paraphrase",
+    "ground_truth": "处理长文本的主要方法包括：1）位置编码外推（如RoPE的NTK-aware scaling）；2）滑动窗口注意力；3）稀疏注意力机制；4）分块处理加全局信息汇总；5）KV-cache优化。不同方法在计算复杂度和效果之间有不同权衡。"
+  },
+  {
+    "question": "向量数据库在 AI 应用中起什么作用？",
+    "type": "paraphrase",
+    "ground_truth": "向量数据库用于存储和检索高维向量表示，支持高效的相似性搜索。在AI应用中主要用于：语义搜索、推荐系统、RAG系统中的文档检索、图像检索等。常用索引算法包括HNSW、IVF等，支持余弦相似度、欧氏距离等度量。"
+  },
+  {
+    "question": "如何评估一个对话系统的质量？",
+    "type": "cross_category",
+    "ground_truth": "评估对话系统质量的指标包括：1）自动指标：BLEU、ROUGE、Perplexity；2）人工评估：流畅度、相关性、一致性；3）任务型指标：任务完成率、对话轮数；4）安全性指标：有害内容检测。综合评估需要结合多种方法。"
+  },
+  {
+    "question": "大模型的推理优化有哪些常见方法？",
+    "type": "cross_category",
+    "ground_truth": "常见的推理优化方法包括：1）KV-cache减少重复计算；2）量化（INT8/INT4）降低内存占用；3）推测解码（Speculative Decoding）加速生成；4）连续批处理（Continuous Batching）提高吞吐；5）模型并行和流水线并行；6）FlashAttention优化注意力计算。"
+  },
+  {
+    "question": "多模态大模型是如何处理不同类型输入的？",
+    "type": "cross_category",
+    "ground_truth": "多模态大模型通过模态编码器将不同类型输入（文本、图像、音频）转换为统一的向量表示，然后通过跨模态注意力机制或投影层将它们融合到共享的语义空间中。常见的架构包括使用CLIP等编码器将图像编码后与文本token拼接输入LLM。"
+  },
+  {
+    "question": "什么是 Prompt Engineering？有哪些技巧？",
+    "type": "cross_category",
+    "ground_truth": "Prompt Engineering是通过设计输入提示来引导大模型产生期望输出的技术。常见技巧包括：1）Few-shot learning提供示例；2）Chain-of-Thought引导推理；3）角色设定；4）格式化输出约束；5）Self-consistency多路径验证；6）Tree-of-Thought树形推理。"
+  },
+  {
+    "question": "如何用微波炉烤面包？",
+    "type": "irrelevant",
+    "ground_truth": "这个问题与面试题库无关，系统应该返回兜底回答，表示无法从知识库中找到相关信息。"
+  },
+  {
+    "question": "今天天气怎么样？",
+    "type": "irrelevant",
+    "ground_truth": "这个问题与面试题库无关，系统应该返回兜底回答。"
+  }
+]
