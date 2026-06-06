@@ -10,18 +10,20 @@ logger = logging.getLogger(__name__)
 
 
 class BGEReranker:
-    """BGE 交叉编码器重排序"""
+    """BGE 交叉编码器重排序（懒加载，不阻塞启动）"""
 
     def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
         self.model_name = model_name
         self.model = None
-        self._load_model()
+        self._loaded = False
 
-    def _load_model(self):
-        """延迟加载模型"""
+    def _ensure_loaded(self):
+        """懒加载模型（首次调用时加载）"""
+        if self._loaded:
+            return
+        self._loaded = True
         try:
             from sentence_transformers import CrossEncoder
-
             self.model = CrossEncoder(self.model_name)
             logger.info(f"Re-ranker 模型已加载: {self.model_name}")
         except ImportError:
@@ -37,16 +39,9 @@ class BGEReranker:
         documents: list[dict],
         top_k: int = 5,
     ) -> list[dict]:
-        """对文档重排序
+        """对文档重排序"""
+        self._ensure_loaded()
 
-        Args:
-            query: 查询文本
-            documents: 文档列表，每个文档需有 "text" 字段
-            top_k: 返回数量
-
-        Returns:
-            重排序后的文档列表
-        """
         if not self.model:
             logger.warning("Re-ranker 模型未加载，返回原始顺序")
             return documents[:top_k]
@@ -55,17 +50,11 @@ class BGEReranker:
             return []
 
         try:
-            # 构造 query-document 对
             pairs = [(query, doc.get("text", "")) for doc in documents]
-
-            # 计算相关性分数
             scores = self.model.predict(pairs)
-
-            # 按分数排序
             scored_docs = list(zip(documents, scores))
             scored_docs.sort(key=lambda x: x[1], reverse=True)
 
-            # 返回 top-k
             results = []
             for doc, score in scored_docs[:top_k]:
                 doc["rerank_score"] = float(score)
@@ -80,4 +69,5 @@ class BGEReranker:
 
     def is_available(self) -> bool:
         """检查模型是否可用"""
+        self._ensure_loaded()
         return self.model is not None

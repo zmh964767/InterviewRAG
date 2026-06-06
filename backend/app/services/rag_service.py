@@ -51,25 +51,29 @@ class RAGService:
         chat_history: list[dict] | None = None,
     ) -> dict:
         """问答（普通返回）"""
+        import asyncio
+        loop = asyncio.get_event_loop()
 
         # 1. 查询改写
         rewritten = await self._rewrite_query(question)
         logger.info(f"查询改写: {question} -> {rewritten}")
 
-        # 2. 混合检索（向量 + BM25 + RRF 融合）
-        retrieved = self.hybrid_retriever.retrieve(
-            query=rewritten,
-            top_k=self.settings.retrieval_top_k,
-        )
-
-        # 3. Re-ranking
-        sources = self._process_results(retrieved)
-        if self.reranker.is_available() and sources:
-            sources = self.reranker.rerank(
+        # 2-3. 混合检索 + Re-ranking（在线程池中运行）
+        def _retrieve_and_rerank():
+            retrieved = self.hybrid_retriever.retrieve(
                 query=rewritten,
-                documents=sources,
-                top_k=self.settings.rerank_top_k,
+                top_k=self.settings.retrieval_top_k,
             )
+            sources = self._process_results(retrieved)
+            if self.reranker.is_available() and sources:
+                sources = self.reranker.rerank(
+                    query=rewritten,
+                    documents=sources,
+                    top_k=self.settings.rerank_top_k,
+                )
+            return sources
+
+        sources = await loop.run_in_executor(None, _retrieve_and_rerank)
 
         # 4. 构建上下文
         context = self._build_context(sources[: self.settings.rerank_top_k])
@@ -77,8 +81,12 @@ class RAGService:
         # 5. 构建消息
         messages = self._build_messages(question, context, chat_history)
 
-        # 6. LLM 生成
-        answer = self.llm_service.chat(messages)
+        # 6. LLM 生成（在线程池中运行避免阻塞事件循环）
+        import asyncio
+        loop = asyncio.get_event_loop()
+        answer = await loop.run_in_executor(
+            None, lambda: self.llm_service.chat(messages)
+        )
 
         return {
             "answer": answer,
@@ -91,25 +99,29 @@ class RAGService:
         chat_history: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
         """问答（流式返回，同时检索前置）"""
+        import asyncio
 
         # 1. 查询改写
         rewritten = await self._rewrite_query(question)
 
-        # 2. 混合检索（向量 + BM25 + RRF 融合）
-        retrieved = self.hybrid_retriever.retrieve(
-            query=rewritten,
-            top_k=self.settings.retrieval_top_k,
-        )
+        # 2-3. 混合检索 + Re-ranking（同步操作，在线程池中运行）
+        loop = asyncio.get_event_loop()
 
-        # 3. Re-ranking
-        sources = self._process_results(retrieved)
-        if self.reranker.is_available() and sources:
-            sources = self.reranker.rerank(
+        def _retrieve_and_rerank():
+            retrieved = self.hybrid_retriever.retrieve(
                 query=rewritten,
-                documents=sources,
-                top_k=self.settings.rerank_top_k,
+                top_k=self.settings.retrieval_top_k,
             )
+            sources = self._process_results(retrieved)
+            if self.reranker.is_available() and sources:
+                sources = self.reranker.rerank(
+                    query=rewritten,
+                    documents=sources,
+                    top_k=self.settings.rerank_top_k,
+                )
+            return sources
 
+        sources = await loop.run_in_executor(None, _retrieve_and_rerank)
         self._last_sources = sources[: self.settings.rerank_top_k]
 
         # 4. 构建上下文
@@ -123,11 +135,15 @@ class RAGService:
             yield chunk
 
     async def _rewrite_query(self, question: str) -> str:
-        """用 LLM 改写查询"""
+        """用 LLM 改写查询（在线程池中运行避免阻塞事件循环）"""
+        import asyncio
         try:
             prompt = REWRITE_PROMPT.format(question=question)
             messages = [{"role": "user", "content": prompt}]
-            rewritten = self.llm_service.chat(messages, temperature=0.3, max_tokens=200)
+            loop = asyncio.get_event_loop()
+            rewritten = await loop.run_in_executor(
+                None, lambda: self.llm_service.chat(messages, temperature=0.3, max_tokens=200)
+            )
             return rewritten.strip() or question
         except Exception as e:
             logger.warning(f"查询改写失败，使用原始查询: {e}")
