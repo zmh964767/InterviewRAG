@@ -54,9 +54,8 @@ class RAGService:
         import asyncio
         loop = asyncio.get_event_loop()
 
-        # 1. 查询改写
-        rewritten = await self._rewrite_query(question)
-        logger.info(f"查询改写: {question} -> {rewritten}")
+        # 直接使用原始问题
+        rewritten = question
 
         # 2-3. 混合检索 + Re-ranking（在线程池中运行）
         def _retrieve_and_rerank():
@@ -101,8 +100,8 @@ class RAGService:
         """问答（流式返回，同时检索前置）"""
         import asyncio
 
-        # 1. 查询改写
-        rewritten = await self._rewrite_query(question)
+        # 直接使用原始问题，跳过查询改写（改写需要额外 LLM 调用，太慢）
+        rewritten = question
 
         # 2-3. 混合检索 + Re-ranking（同步操作，在线程池中运行）
         loop = asyncio.get_event_loop()
