@@ -28,6 +28,11 @@ out/
 *.swp
 *.swo
 
+# Screenshots & test artifacts
+docs/screenshots/
+.playwright-mcp/
+*.png
+
 # OS
 .DS_Store
 Thumbs.db

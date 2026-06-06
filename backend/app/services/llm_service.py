@@ -50,29 +50,42 @@ class LLMService:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncGenerator[str, None]:
-        """流式对话（使用同步迭代器包装）"""
+        """流式对话（真正的逐 token 流式）"""
         import asyncio
+        import queue
 
         try:
-            # zhipuai SDK 的流式调用是同步的，在线程池中运行避免阻塞事件循环
             loop = asyncio.get_event_loop()
+            q: queue.Queue = queue.Queue()
+            sentinel = object()  # 结束标记
 
-            def _sync_stream() -> list[str]:
-                response = self.client.chat.completions.create(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature or self.temperature,
-                    max_tokens=max_tokens or self.max_tokens,
-                    stream=True,
-                )
-                chunks: list[str] = []
-                for chunk in response:
-                    if chunk.choices[0].delta.content:
-                        chunks.append(chunk.choices[0].delta.content)
-                return chunks
+            def _sync_stream():
+                try:
+                    response = self.client.chat.completions.create(
+                        model=self.model,
+                        messages=messages,
+                        temperature=temperature or self.temperature,
+                        max_tokens=max_tokens or self.max_tokens,
+                        stream=True,
+                    )
+                    for chunk in response:
+                        if chunk.choices[0].delta.content:
+                            q.put(chunk.choices[0].delta.content)
+                except Exception as e:
+                    q.put(e)
+                finally:
+                    q.put(sentinel)
 
-            chunks = await loop.run_in_executor(None, _sync_stream)
-            for chunk in chunks:
+            # 在线程池中启动同步流
+            loop.run_in_executor(None, _sync_stream)
+
+            # 逐个 yield chunk
+            while True:
+                chunk = await loop.run_in_executor(None, q.get)
+                if chunk is sentinel:
+                    break
+                if isinstance(chunk, Exception):
+                    raise chunk
                 yield chunk
         except ExternalServiceError:
             raise

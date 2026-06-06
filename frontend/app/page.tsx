@@ -51,14 +51,6 @@ export default function Home() {
     clearMessages()
   }, [createConversation, clearMessages])
 
-  // 清空当前对话消息
-  const handleClear = useCallback(() => {
-    clearMessages()
-    if (currentId) {
-      updateMessages([])
-    }
-  }, [clearMessages, currentId, updateMessages])
-
   // 重新生成最后一条回答
   const handleRegenerate = useCallback(() => {
     if (messages.length < 2) return
@@ -120,20 +112,6 @@ export default function Home() {
               InterviewRAG
             </h1>
           </div>
-          {messages.length > 0 && (
-            <button
-              onClick={handleClear}
-              className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg transition-all"
-              style={{ color: 'var(--ink-muted)', border: '1px solid var(--border)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--ink-muted)' }}
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              新对话
-            </button>
-          )}
         </header>
 
         <ChatHistory
