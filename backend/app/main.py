@@ -22,9 +22,12 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    import os
+    # 设置 HuggingFace 国内镜像（Re-ranker 模型下载）
+    if not os.environ.get("HF_ENDPOINT"):
+        os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
     settings = get_settings()
     logger.info(f"启动 InterviewRAG，ChromaDB 路径: {settings.chroma_persist_dir}")
-    # 这里可以预加载模型、初始化数据库连接等
     yield
     logger.info("关闭 InterviewRAG")
 
