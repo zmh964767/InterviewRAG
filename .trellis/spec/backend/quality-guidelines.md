@@ -70,3 +70,34 @@
 ### 6. Windows 端口占用
 **问题**：Windows 上 `taskkill` 后端口可能不立即释放。
 **解决**：用 `taskkill //F //IM python.exe` 强制杀进程，或换端口号。
+
+### 7. RAGAS 0.4.3 + 智谱 LLM 集成
+**问题**：RAGAS 0.4.3 的 collections metrics（Faithfulness/AnswerRelevancy 等）不接受 langchain `LangchainLLMWrapper`，必须用 `InstructorLLM`。
+**解决**：用 `openai.AsyncOpenAI` + `ragas.llms.llm_factory` 创建 `InstructorLLM`。
+```python
+from openai import AsyncOpenAI
+from ragas.llms import llm_factory
+client = AsyncOpenAI(api_key=key, base_url="https://open.bigmodel.cn/api/paas/v4/")
+llm = llm_factory("glm-4-flash", client=client)
+```
+**注意**：`llm_factory` 的 `**kwargs` 会透传给 `InstructorLLM.__init__`，不能同时传 `model_args`（会冲突）。max_tokens 通过 `InstructorModelArgs` 设置。
+
+### 8. RAGAS faithfulness 输出截断
+**问题**：智谱 glm-4-flash 单次输出上限 ~4096 tokens，faithfulness 评估需要 ~6000+ tokens（15 个 statements + verdicts + reasons），导致 `finish_reason='length'` 截断。
+**解决**：目前无法绕过（模型本身限制）。faithfulness 分数偶尔偏低是正常的，不影响其他 3 个指标（answer_relevancy/context_precision/context_recall 通常够用）。
+**规避**：用更短的答案做评估，或换更高 max_tokens 的模型（glm-4-long）。
+
+### 9. BGE Re-ranker Windows 加载卡死
+**问题**：`sentence_transformers.CrossEncoder('BAAI/bge-reranker-base')` 在 Windows 上加载 1.1G 模型时 hang 死（>8 分钟无响应）。
+**解决**：通过 `SKIP_RERANKER=1` 环境变量跳过加载。
+```python
+# bge_reranker.py
+if os.environ.get("SKIP_RERANKER", "").lower() in ("1", "true", "yes"):
+    return  # 跳过加载
+```
+**位置**：`app/rerankers/bge_reranker.py` 的 `_ensure_loaded()` 方法。
+
+### 10. 评估数据集必须用改写题目
+**问题**：用 ChromaDB 里的原题做评估，所有检索策略命中率相同（HR@5=0.8929），没有区分度。
+**解决**：用不同措辞的改写题目（paraphrase），测试真正的语义检索能力。改写题目的 Hit Rate 应该用**关键词重叠 + 子串匹配**（不是 SequenceMatcher 文本相似度）。
+**结论**：混合检索（向量+BM25）在改写题目上比纯向量高 50%。
