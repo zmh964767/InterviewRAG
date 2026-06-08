@@ -1,226 +1,178 @@
 [
   {
-    "id": "Ag_001",
-    "question": "了解A2A框架吗？它和普通Agent框架的区别在哪，挑一个最关键的不同点说明。",
-    "ground_truth": "是的，我了解A2A（Agent-to-Agent）框架或协议的概念。它代表了多智能体系统研究中的一个重要方向。 和普通Agent框架的区别： 一个普通的Agent框架，如LangChain或Auto-GPT，其核心关注点是单个Agent的内部工作循环和能力。它定义了一个Agent如何感知环境、进行规划（思考）、调用工具（行动）、并处理反馈（观察）。它的设计蓝图是围绕着一个独立的、自主的个体。 而A2A框架的核心关注点则完全不同，它关注的是多个异构Agent之间的通信和协作。它试图定义一套通用的标准、协议和语言，使得由不同开发者、使用不同技术栈、为了不同目标而构建的Agent们，能够相互发现、理",
-    "category": "Agent",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "para_001",
+    "type": "paraphrase",
+    "question": "Transformer 里的注意力是怎么算的？",
+    "ground_truth": "自注意力机制通过计算 Query、Key、Value 之间的注意力权重来捕捉序列依赖关系",
+    "category": "LLM",
+    "source": "paraphrase"
   },
   {
-    "id": "Ag_002",
-    "question": "请详细解释 ReAct 框架。它是如何将思维链和行动结合起来，以完成复杂任务的？",
-    "ground_truth": "ReAct (Reason and Act) 是一个强大且基础的Agent行为框架，它通过一种巧妙的提示（Prompting）策略，让LLM能够协同地生成推理轨迹（reasoning traces）和任务相关的行动（actions）。 核心思想： ReAct的核心思想是，人类在解决复杂问题时，并不仅仅是“思考”或“行动”，而是将两者紧密地交织在一起。我们会先思考一下，然后采取一个行动，观察结果，再根据结果进行思考，决定下一步行动。ReAct就是模仿人类这种“思考 -> 行动 -> 观察 -> 思考...”的循环模式。 工作流程： ReAct通过一个精心设计的Prompt来引导LLM生成特定格式",
-    "category": "Agent",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "para_002",
+    "type": "paraphrase",
+    "question": "为什么 Transformer 比 RNN 更适合处理长文本？",
+    "ground_truth": "自注意力机制允许 Transformer 并行处理序列，并直接建模任意距离的依赖关系",
+    "category": "LLM",
+    "source": "paraphrase"
   },
   {
-    "id": "Ag_003",
-    "question": "你如何定义一个基于 LLM 的智能体（Agent）？它通常由哪些核心组件构成？",
-    "ground_truth": "一个基于 LLM 的智能体（Agent）是一个能够自主理解环境、进行规划决策、并执行行动以达成特定目标的计算系统。其核心特征是利用一个大型语言模型（LLM）作为其“大脑”或“中央处理器”，来进行复杂的推理和决策。 与传统的调用LLM进行问答或文本生成不同，Agent具有自主性和循环执行的特点，它能主动地、持续地与环境或工具交互，直到完成任务。 一个典型的LLM Agent通常由以下四个核心组件构成： 1. 大脑/核心引擎 (Brain/Core Engine): * 组件： 一个强大的大型语言模型（LLM），如GPT系列、Gemini、Llama等。 * 作用： 这是Agent的认知核心。它负",
-    "category": "Agent",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "para_003",
+    "type": "paraphrase",
+    "question": "RoPE 是什么？和传统位置编码有什么区别？",
+    "ground_truth": "RoPE（旋转位置编码）通过向量旋转将位置信息编码到 Q/K 中，支持相对位置建模",
+    "category": "LLM",
+    "source": "paraphrase"
   },
   {
-    "id": "Ag_004",
-    "question": "Tool Use是扩展 Agent 能力的有效途径。请解释 LLM 是如何学会调用外部 API 或工具的？（可以从 Function Calling 的角度解释）",
-    "ground_truth": "LLM学会调用外部API或工具，是其从一个纯粹的“语言模型”转变为一个“行动执行者”的关键一步。这一能力的核心是让LLM能够理解何时需要使用工具，以及如何以结构化的方式表达使用哪个工具和传递什么参数。目前，主流的实现方式是Function Calling。 Function Calling的工作原理如下： 1. 工具定义与注册 (Tool Definition & Registration): * 我们首先需要以一种机器可读的方式，向LLM“描述”我们有哪些可用的工具。这个描述通常是一个结构化的模式（Schema），比如JSON Schema。 * 对于每一个工具，我们需要定义： * 函数名称",
-    "category": "Agent",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "para_004",
+    "type": "paraphrase",
+    "question": "MHA、MQA、GQA 有什么区别？",
+    "ground_truth": "MHA 多头注意力、MQA 多查询注意力（共享 KV）、GQA 分组查询注意力（折中方案）",
+    "category": "LLM",
+    "source": "paraphrase"
   },
   {
-    "id": "LL_001",
-    "question": "什么是词元化？请比较一下 BPE 和 WordPiece 这两种主流的子词切分算法。",
-    "ground_truth": "什么是词元化（Tokenization）？ 词元化是将原始的文本字符串分解成一个个独立的单元（称为“词元”或“token”），并将这些词元映射到唯一的整数ID的过程。这是自然语言处理模型处理文本的第一步，因为模型只能处理数字输入。 现代大型语言模型普遍采用 子词（Subword） 词元化算法，它介于按词切分和按字符切分之间。这样做的好处是： 1. 有效处理未登录词（OOV）： 任何罕见词或新词都可以被拆解成已知的子词组合，避免了“未知”标记。 2. 平衡词表大小与序列长度： 相比于词级别，词表规模大大减小；相比于字符级别，生成的序列长度又不会过长，兼顾了效率。 3. 保留形态信息： 像 \"ru",
-    "category": "LLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "para_005",
+    "type": "paraphrase",
+    "question": "大模型常用的激活函数有哪些？",
+    "ground_truth": "GeLU 和 SwiGLU 是主流选择，SwiGLU 在 LLaMA 等模型中效果更好",
+    "category": "LLM",
+    "source": "paraphrase"
   },
   {
-    "id": "LL_002",
-    "question": "你知道MHA，MQA，GQA的区别吗？详细解释一下。",
-    "ground_truth": "MHA、MQA和GQA是Transformer模型中三种不同的注意力机制变体，它们的主要区别在于如何组织和共享Query、Key和Value的“头”（Head），核心目标是在模型效果和推理效率（特别是显存占用）之间做出不同的权衡。 #### 1. MHA (Multi-Head Attention) 这是原始Transformer论文中提出的标准注意力机制。 * 工作原理： 1. 将输入的Q、K、V向量分别通过 [公式] 个独立的线性变换，得到 [公式] 组不同的 [公式] 头（ [公式] ）。 2. 这 [公式] 组头在各自的子空间中并行地计算注意力（Scaled Dot-Product A",
-    "category": "LLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "para_006",
+    "type": "paraphrase",
+    "question": "LoRA 微调是怎么做的？",
+    "ground_truth": "LoRA 在预训练权重旁添加低秩分解矩阵，只训练小矩阵，冻结原始权重",
+    "category": "LLM",
+    "source": "paraphrase"
   },
   {
-    "id": "LL_003",
-    "question": "请你详细介绍ROPE，对比绝对位置编码它的优劣势分别是什么？",
-    "ground_truth": "RoPE (Rotary Position Embedding) 介绍 RoPE，全称旋转位置编码，是目前大语言模型（如Llama系列、Qwen等）中最主流的位置编码方案之一。它是一种将位置信息融入自注意力机制的创新方法。 其核心思想是：通过向量旋转的方式，将绝对位置信息编码到Query和Key向量中，从而使得模型在计算注意力分数时，能够自然地利用相对位置信息。 工作原理： RoPE不再像传统位置编码那样直接将位置向量加到词嵌入上。它的操作发生在生成Q和K向量之后、计算注意力分数之前： 1. 维度分组： 将Q和K向量的 [公式] 维特征两两一组，视为 [公式] 个二维向量。 2. 构造旋转矩阵",
-    "category": "LLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "LL_004",
-    "question": "激活函数有了解吗，你知道哪些LLM常用的激活函数？为什么选用它？",
-    "ground_truth": "是的，我了解激活函数。激活函数是神经网络中至关重要的一环，它的主要作用是为网络引入非线性（non-linearity）。如果没有激活函数，多层神经网络本质上等同于一个单层的线性模型，无法学习和拟合复杂的数据模式。 在现代大型语言模型（Transformer架构）中，最常用的激活函数主要有两个：GeLU 和 SwiGLU。 1. GeLU (Gaussian Error Linear Unit): * 简介： GeLU曾是Transformer模型中的主流激活函数，被BERT、GPT-2等经典模型采用。它的数学形式是 [公式]，其中 [公式] 是高斯分布的累积分布函数。 * 为什么选用它？ * ",
-    "category": "LLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "RA_001",
-    "question": "一个完整的 RAG 流水线包含哪些关键步骤？请从数据准备到最终生成，详细描述整个过程。",
-    "ground_truth": "一个完整的RAG流水线可以分为两个主要阶段：离线的数据准备（索引）阶段 和 在线的查询（推理）阶段。 阶段一：数据准备 / 索引流水线 (Offline / Indexing Pipeline) 这个阶段的目标是构建一个可供检索的知识库，它通常是一次性或周期性执行的。 1. 数据加载（Load）： 从各种数据源加载原始文档。数据源可以是PDF文件、Word文档、网页、Notion数据库、Confluence页面、数据库表格等。 2. 文本切块（Split / Chunk）： 将加载进来的长文档切割成更小的、语义完整的文本块（chunks）。这一步至关重要，因为后续的检索和生成都是以这些小块为单",
+    "id": "para_007",
+    "type": "paraphrase",
+    "question": "RAG 系统的基本流程是什么？",
+    "ground_truth": "文档分块 → 向量化 → 存储 → 用户提问 → 语义检索 → 拼接上下文 → LLM 生成",
     "category": "RAG",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "source": "paraphrase"
   },
   {
-    "id": "RA_002",
-    "question": "了解搜索系统吗？和RAG有什么区别？",
-    "ground_truth": "是的，我了解搜索系统。搜索系统和RAG系统关系紧密，但它们的目标和最终产出有本质的区别。可以说，RAG系统是构建在搜索系统之上的一个更高级的应用。 搜索系统 (Search System) - 例如 Google Search, Elasticsearch * 核心目标： 信息检索（Information Retrieval）。它的任务是，根据用户的查询，从一个大规模的文档集合中，找到并返回一个排序好的文档列表（a ranked list of documents）。 * 最终产出： “源”。它提供的是“可能包含答案的原材料”，用户需要自己去点击链接、阅读文档、并从中自己总结出答案。 * 核心",
+    "id": "para_008",
+    "type": "paraphrase",
+    "question": "BM25 和向量检索怎么结合使用？",
+    "ground_truth": "混合检索通过 RRF 融合 BM25 关键词匹配和向量语义检索的结果",
     "category": "RAG",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "source": "paraphrase"
   },
   {
-    "id": "RA_003",
-    "question": "传统的 RAG 流程是“先检索后生成”，你是否了解一些更复杂的 RAG 范式，比如在生成过程中进行多次检索或自适应检索？",
-    "ground_truth": "是的，传统的“先检索后生成”（Retrieve-then-Read）范式虽然经典，但比较刻板。为了应对更复杂的问题和提升答案质量，研究界已经提出了多种更动态、更智能的RAG范式。 1. 迭代式检索 (Iterative Retrieval) - 例如 Self-RAG, Corrective-RAG * 核心思想： 将RAG从一个单向的流水线，变成一个循环、自我修正的过程。 * 工作流程： 1. 首次检索与生成： 像传统RAG一样，进行检索并生成一个初步的答案。 2. 反思与评估（Reflection）： LLM会对初步生成的答案和检索到的上下文进行“反思”。它会评估：当前的信息是否足够支撑答",
+    "id": "para_009",
+    "type": "paraphrase",
+    "question": "Re-ranker 在 RAG 里起什么作用？",
+    "ground_truth": "Reranker 对初步检索结果精细排序，提升送入 LLM 的上下文质量",
     "category": "RAG",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "source": "paraphrase"
   },
   {
-    "id": "RA_004",
-    "question": "知道或者使用过哪些开源RAG框架比如Ragflow？如何选择合适场景？",
-    "ground_truth": "是的，我了解并关注着多个开源RAG框架和平台。除了最广为人知的、作为基础工具库的 LangChain 和 LlamaIndex 之外，还涌现出了一批更专注于提供端到端RAG解决方案的平台，其中 RAGFlow 就是一个很有代表性的例子。其他类似的框架还包括 Haystack, DSPy 等。 对RAGFlow的理解： RAGFlow与LangChain/LlamaIndex这类“代码库”形态的框架不同，它更像一个 “开箱即用”的、对业务人员更友好的RAG应用平台。它的特点是： * 自动化与可视化： RAGFlow试图将RAG流水线中许多复杂的、需要编码和经验调优的步骤自动化。例如，它提供了基于",
+    "id": "para_010",
+    "type": "paraphrase",
+    "question": "RLHF 是怎么训练的？",
+    "ground_truth": "RLHF 包含 SFT 监督微调 → 奖励模型训练 → PPO 强化学习优化三个阶段",
+    "category": "RLHF",
+    "source": "paraphrase"
+  },
+  {
+    "id": "para_011",
+    "type": "paraphrase",
+    "question": "ReAct 框架是怎么工作的？",
+    "ground_truth": "ReAct 通过 Thought-Action-Observation 循环，让 LLM 交替进行推理和工具调用",
+    "category": "Agent",
+    "source": "paraphrase"
+  },
+  {
+    "id": "para_012",
+    "type": "paraphrase",
+    "question": "Function Calling 是怎么实现的？",
+    "ground_truth": "通过工具 Schema 定义让 LLM 识别调用意图，返回结构化函数参数，应用层执行后返回结果",
+    "category": "Agent",
+    "source": "paraphrase"
+  },
+  {
+    "id": "cross_001",
+    "type": "cross_category",
+    "question": "如何评估 RAG 系统的效果？",
+    "ground_truth": "RAGAS 评估框架包含 faithfulness、answer_relevancy、context_precision、context_recall 四个维度",
     "category": "RAG",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "source": "cross"
   },
   {
-    "id": "RL_001",
-    "question": "你知道Deepseek的GRPO吗，它和PPO的主要区别是什么？优劣是什么？",
-    "ground_truth": "(具体可以参考GRPO论文，自己阐述理解)",
-    "category": "RLHF 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "cross_002",
+    "type": "cross_category",
+    "question": "多模态模型是怎么处理图像和文本的？",
+    "ground_truth": "VLM 通过视觉编码器将图像转为 token，投影到 LLM 的 embedding 空间联合处理",
+    "category": "VLM",
+    "source": "cross"
   },
   {
-    "id": "RL_002",
-    "question": "什么是“奖励作弊/奖励黑客”（Reward Hacking）？请结合一个具体的LLM应用场景给出一个例子，并探讨几种可能的缓解策略。",
-    "ground_truth": "奖励作弊（Reward Hacking），也称作“规范博弈”（Specification Gaming），指的是在强化学习中，智能体（Agent）发现并利用了奖励函数（Reward Function）的漏洞或不完善之处，以一种设计者非预期的方式来最大化奖励，但实际上并没有完成任务的真正目标。本质上是“钻了规则的空子”。 LLM应用场景举例： * 场景： 训练一个生成文本摘要的LLM。 * 奖励模型（RM）的设计： 假设我们设计的RM偏好那些包含原文中所有重要关键词且长度较长（认为长摘要信息更全）的摘要。 * 奖励作弊的现象： 经过RLHF训练后，这个LLM可能会生成这样的“摘要”：它不再是精炼",
-    "category": "RLHF 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "cross_003",
+    "type": "cross_category",
+    "question": "Transformer 的位置编码有哪些实现方式？",
+    "ground_truth": "绝对位置编码、RoPE 旋转位置编码、ALiBi 线性偏置，RoPE 是目前主流方案",
+    "category": "LLM",
+    "source": "cross"
   },
   {
-    "id": "RL_003",
-    "question": "和传统SFT相比，RLHF旨在解决语言模型中的哪些核心问题？为什么说SFT本身不足以实现我们期望的“对齐”目标？",
-    "ground_truth": "与传统的监督微调（SFT）相比，RLHF（从人类反馈中进行强化学习）旨在解决语言模型中更深层次的“对齐”（Alignment）问题。这具体包括三个方面，通常被称为“HHH”原则： 1. 有用性（Helpfulness）： 模型应该提供准确、相关且信息量丰富的内容，尽力帮助用户解决问题。 2. 诚实性（Honesty）： 模型应基于其知识进行回答，不应捏造事实。在不知道答案或无法满足要求时，应主动承认，而不是产生幻觉。 3. 无害性（Harmlessness）： 模型不能产生有偏见、歧视性、暴力、色情或任何其他可能造成伤害的内容。 为什么SFT本身不足以实现对齐目标？ 1. 目标定义模糊： “有",
-    "category": "RLHF 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "cross_004",
+    "type": "cross_category",
+    "question": "大模型推理优化有哪些方法？",
+    "ground_truth": "KV Cache、量化、推测解码、FlashAttention、连续批处理等",
+    "category": "LLM",
+    "source": "cross"
   },
   {
-    "id": "RL_004",
-    "question": "GSPO和DAPO有听说过吗？他们和GRPO有什么区别？",
-    "ground_truth": "(这是一个考察前沿知识广度的问题。截至目前，GSPO和DAPO并非像PPO、DPO那样广为人知或被广泛采纳的主流算法缩写可以参考腾讯，阿里相关论文了解)",
-    "category": "RLHF 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
+    "id": "cross_005",
+    "type": "cross_category",
+    "question": "Agent 系统有哪些常见的协作模式？",
+    "ground_truth": "层级式、辩论式、流水线式，框架如 AutoGen、CrewAI",
+    "category": "Agent",
+    "source": "cross"
   },
   {
-    "id": "VL_001",
-    "question": "请解释 CLIP 模型的工作原理。它是如何通过对比学习来连接图像和文本的？",
-    "ground_truth": "CLIP（Contrastive Language-Image Pre-training）是一个通过在海量图文对数据上进行预训练，从而学会将图像和文本关联起来的 foundational model。它的核心是利用 对比学习（Contrastive Learning） 来打通视觉和语言两个模态。 工作原理如下： 1. 双编码器架构（Dual-Encoder Architecture）： * 图像编码器（Image Encoder）： 通常是一个标准的视觉模型，如ResNet或Vision Transformer (ViT)，负责将输入的图像转换成一个高维的特征向量。 * 文本编码器（Text ",
-    "category": "VLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "VL_002",
-    "question": "什么是视觉指令微调？为什么说它是让 VLM 具备良好对话和指令遵循能力的关键步骤？",
-    "ground_truth": "视觉指令微调（Visual Instruction Tuning, VIT） 是一种训练方法，它使用一个由大量“指令-响应”对组成的数据集来微调一个预训练好的VLM。与传统任务（如VQA、图像描述）的数据集不同，指令微调数据集的格式更加多样和自由，旨在模拟人类与智能助手的交互方式。 每条数据通常包含三个部分： 1. 视觉输入（Vision Input）： 一张图片或视频。 2. 指令（Instruction）： 一个用自然语言提出的、与视觉输入相关的任务或问题。例如，“请详细描述这幅画的风格”，“图中最高的建筑物是什么？”，“根据这张图写一个三句话的故事”。 3. 响应（Response）： ",
-    "category": "VLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "VL_003",
-    "question": "除了图片描述和视觉问答（VQA），你还能列举出 VLM 的哪些前沿或具有潜力的应用方向？",
-    "ground_truth": "除了基础的图片描述和视觉问答，VLM正在向更复杂、更具交互性的前沿方向发展，展现出巨大的应用潜力： 1. 多模态对话系统与个人助手： * 用户可以发送图片、截图，并围绕这些视觉信息与助手进行多轮、深入的对话。例如，“帮我看看这张冰箱里的图片，晚上能做什么菜？”“如果用鸡蛋和西红柿，具体步骤是什么？” 2. 视觉定位与指令执行（Visual Grounding & Grounded Agents）： * VLM不仅能理解图像内容，还能在图像上进行定位和操作。这可以用于： * UI自动化： 指挥VLM“点击那个写着‘提交’的蓝色按钮”，VLM能理解指令并定位按钮位置。 * 具身智能（Embodie",
-    "category": "VLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "VL_004",
-    "question": "多模态大模型（如 VLM）的核心挑战是什么？即如何实现不同模态信息（如视觉和语言）的有效对齐和融合？",
-    "ground_truth": "多模态大模型（VLM）的核心挑战在于解决 “模态鸿沟”（Modality Gap） 。视觉信息（如图像、视频）是以像素矩阵的形式存在的，密集、具体且连续；而语言信息是以离散的符号（token）序列存在的，稀疏、抽象且结构化。如何让模型跨越这两种完全不同的数据形式，实现有效的理解和推理，是VLM研究的中心问题。 这个挑战的解决方案主要包含两个关键环节： 1. 对齐（Alignment）：建立跨模态的语义连接 * 目标： 对齐的目标是让模型理解视觉世界中的“概念”和人类语言中的“符号”是指代的同一事物。例如，模型需要知道图片中的一只奔跑的狗的像素集合，和文本描述“a running dog”在语义",
-    "category": "VLM 八股",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "te_001",
-    "question": "undo test x",
-    "ground_truth": "undo answer x",
-    "category": "test",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "模型_001",
-    "question": "在进行人工评估时，如何设计合理的评估准则和流程，以保证评估结果的客观性和一致性？",
-    "ground_truth": "在人工评估中，保证结果的 客观性（Objectivity） 和 一致性（Consistency） 是最大的挑战，因为人类的判断天生是主观的。设计合理的评估准则（Rubric）和流程是克服这一挑战的关键。 一、 设计合理的评估准则（Rubric）： 1. 明确且原子化的评估维度（Clear and Atomic Dimensions）： * 不要使用模糊的词语如“好”或“坏”。将“质量”分解为多个相互独立的、具体的维度。例如： * 准确性（Accuracy）： 答案是否包含事实错误？ * 完整性（Completeness）： 答案是否全面地回应了问题的所有方面？ * 简洁性（Concisenes",
-    "category": "模型评估与 Agent 评估",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "模型_002",
-    "question": "在评估一个 Agent 的任务完成情况时，除了最终结果的正确性，还有哪些过程指标是值得关注的？（例如：效率、成本、鲁棒性）",
-    "ground_truth": "在评估Agent时，只看最终结果的正确性（Task Success）是远远不够的。一个优秀的Agent不仅要能“做对事”，还要“聪明地、高效地、可靠地做事”。因此，关注过程指标至关重要，它们能更全面地反映Agent的智能水平。 值得关注的关键过程指标包括： 1. 效率 (Efficiency): * 定义： 衡量Agent完成任务所消耗的资源。效率是决定Agent在现实世界中是否可用的关键因素。 * 具体指标： * 成本 (Cost): * Token消耗量： Agent在所有思考和生成步骤中消耗的总Token数。 * API调用费用： 如果使用了付费的LLM或工具API，完成一次任务的总花费",
-    "category": "模型评估与 Agent 评估",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "模型_003",
-    "question": "如何设计一个评估方案来衡量 LLM 的特定能力，比如“事实性/幻觉水平”、“推理能力”或“安全性”？",
-    "ground_truth": "为衡量LLM的特定能力设计评估方案，需要遵循“定义能力 -> 构建数据集 -> 确定评估方法”的流程。 1. 衡量“事实性/幻觉水平”： * 能力定义： 模型生成的回答是否基于可验证的事实，而不是捏造信息。 * 数据集构建： * 基于知识库的QA： 构建一个问题集，其中每个问题的答案都可以从一个确定的知识源（如Wikipedia、公司内部文档、数据库）中找到。 * 对抗性问题： 设计一些诱导模型产生幻觉的问题，比如询问关于不存在的人物或事件的信息。 * 评估方法： * 精确匹配/关键词匹配： 对于事实简单的问题（如“谁是新加坡现任总统？”），可以直接将生成答案中的实体与标准答案进行比较。 * ",
-    "category": "模型评估与 Agent 评估",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "模型_004",
-    "question": "什么是红队测试？它在发现 LLM 和 Agent 的安全漏洞与偏见方面扮演着什么角色？",
-    "ground_truth": "红队测试（Red Teaming）是一种对抗性测试方法，源自于网络安全领域的渗透测试。在AI领域，它指的是组织一个专门的团队（红队），主动地、创造性地、像一个“攻击者”一样，去寻找和利用LLM或Agent的漏洞、缺陷和非预期行为，以评估和提升其安全性和鲁棒性。 与常规测试（使用固定的、已知的测试用例）不同，红队测试的核心在于“探索未知”，发现那些开发者在设计时没有预料到的、可能导致严重后果的“边缘案例”和“攻击向量”。 红队测试在发现安全漏洞与偏见方面的核心角色： 1. 发现安全漏洞 (Security Vulnerabilities): * 绕过安全护栏： 红队会设计各种复杂的、精心构造的提",
-    "category": "模型评估与 Agent 评估",
-    "difficulty": "中等",
-    "source": "chromadb"
-  },
-  {
-    "id": "irrelevant_001",
+    "id": "irrel_001",
+    "type": "irrelevant",
     "question": "如何用微波炉烤面包？",
     "ground_truth": "无关题，应拒答",
     "category": "无关",
-    "difficulty": "-",
     "source": "manual"
   },
   {
-    "id": "irrelevant_002",
+    "id": "irrel_002",
+    "type": "irrelevant",
     "question": "今天天气怎么样？",
     "ground_truth": "无关题，应拒答",
     "category": "无关",
-    "difficulty": "-",
     "source": "manual"
   },
   {
-    "id": "irrelevant_003",
+    "id": "irrel_003",
+    "type": "irrelevant",
     "question": "法国的首都是哪里？",
     "ground_truth": "无关题，应拒答",
     "category": "无关",
-    "difficulty": "-",
+    "source": "manual"
+  },
+  {
+    "id": "irrel_004",
+    "type": "irrelevant",
+    "question": "推荐一部好看的电影",
+    "ground_truth": "无关题，应拒答",
+    "category": "无关",
+    "source": "manual"
+  },
+  {
+    "id": "irrel_005",
+    "type": "irrelevant",
+    "question": "怎么做红烧肉？",
+    "ground_truth": "无关题，应拒答",
+    "category": "无关",
     "source": "manual"
   }
 ]
