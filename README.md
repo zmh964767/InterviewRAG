@@ -60,13 +60,11 @@ pip install -r requirements.txt
 cp .env.example .env
 # 编辑 .env，填入 ZHIPU_API_KEY
 
-# 导入数据
-python -m app.parsers.md_parser data/raw/Extra01-参考答案.md data/processed/questions.json
-python -m app.cli ingest --source data/processed/questions.json
-
-# 启动服务
-uvicorn app.main:app --reload --port 8000
+# 启动服务（默认端口 8080）
+SKIP_RERANKER=1 uvicorn app.main:app --reload --port 8080
 ```
+
+> **注意**：`SKIP_RERANKER=1` 跳过 BGE Re-ranker 加载（Windows 上加载卡死）。如需 Re-ranker，去掉此环境变量。
 
 ### 2. 前端
 
@@ -77,13 +75,37 @@ npm run dev
 # 访问 http://localhost:3000
 ```
 
-### 3. 评估
+### 3. 知识库管理
+
+访问 `http://localhost:3000/kb`：
+- 查看题目列表（支持搜索、分类、难度过滤）
+- 上传 md/pdf 文件或输入 URL 导入
+- 删除单条题目（5 秒内可撤销）
+
+### 4. 评估系统
 
 ```bash
 cd backend
-python -m evaluation.ragas_eval
-python -m evaluation.comparison
+
+# 快速评估（~2 分钟，只跑检索对比）
+SKIP_RERANKER=1 python -m evaluation.run --mode comparison --skip-regression
+
+# 完整评估（~30 分钟，含 RAGAS 4 指标）
+SKIP_RERANKER=1 python -m evaluation.run --mode ragas --skip-regression
+
+# 查看报告
+cat evaluation/report.md
 ```
+
+**评估模式**：
+- `comparison`：4 种检索策略对比（Hit Rate@5 + MRR）
+- `ragas`：RAGAS 4 指标（faithfulness/answer_relevancy/context_precision/context_recall）
+- `sanity`：快速链路验证（不调 RAGAS）
+- `full`：ragas + comparison
+
+**环境变量**：
+- `SKIP_RERANKER=1`：跳过 BGE Re-ranker（Windows 必需）
+- `ZHIPU_API_KEY`：智谱 API 密钥（.env 文件配置）
 
 ## 📊 检索策略对比
 
@@ -96,7 +118,16 @@ python -m evaluation.comparison
 
 ## 📝 API 文档
 
-启动后端后访问：`http://localhost:8000/docs`
+启动后端后访问：`http://localhost:8080/docs`
+
+**主要端点**：
+- `POST /api/query` — 问答（支持流式 SSE）
+- `GET /api/questions` — 题目列表（分页+过滤）
+- `POST /api/ingest/upload` — 上传文件导入
+- `POST /api/ingest/insert-one` — 单条插入（撤销用）
+- `DELETE /api/questions/{id}` — 删除单条
+- `GET /api/health` — 健康检查
+- `GET /api/stats` — 知识库统计
 
 ## License
 
