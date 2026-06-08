@@ -1,67 +1,242 @@
 [
   {
+    "id": "recall_001",
+    "type": "recall",
+    "category": "LLM",
     "question": "Transformer 的自注意力机制是如何工作的？",
-    "type": "recall",
-    "ground_truth": "自注意力机制通过计算查询(Query)、键(Key)、值(Value)之间的注意力权重来捕捉序列中的依赖关系。具体步骤包括：1）将输入通过线性变换得到Q、K、V；2）计算注意力分数 QK^T / sqrt(d_k)；3）通过 softmax 归一化得到注意力权重；4）将权重与V相乘得到输出。多头注意力允许模型同时关注不同位置的不同表示子空间。"
+    "ground_truth": "自注意力机制通过计算查询(Query)、键(Key)、值(Value)之间的注意力权重来捕捉序列中的依赖关系。具体步骤包括：1）将输入通过线性变换得到Q、K、V；2）计算注意力分数 QK^T / sqrt(d_k)；3）通过 softmax 归一化得到注意力权重；4）将权重与V相乘得到输出。多头注意力允许模型同时关注不同位置的不同表示子空间。",
+    "source": "questions.md"
   },
   {
+    "id": "recall_002",
+    "type": "recall",
+    "category": "RAG",
     "question": "请介绍 RAG 的基本流程",
-    "type": "recall",
-    "ground_truth": "RAG（检索增强生成）的基本流程包括：1）文档解析和分块；2）向量化并存入向量数据库；3）用户提问时进行语义检索，找到相关文档片段；4）将检索到的上下文与用户问题一起输入LLM；5）LLM基于检索到的信息生成回答。核心优势是让LLM的回答基于真实文档，减少幻觉。"
+    "ground_truth": "RAG（检索增强生成）的基本流程包括：1）文档解析和分块；2）向量化并存入向量数据库；3）用户提问时进行语义检索，找到相关文档片段；4）将检索到的上下文与用户问题一起输入LLM；5）LLM基于检索到的信息生成回答。核心优势是让LLM的回答基于真实文档，减少幻觉。",
+    "source": "questions.md"
   },
   {
+    "id": "recall_003",
+    "type": "recall",
+    "category": "RLHF",
     "question": "RLHF 的训练流程是怎样的？",
-    "type": "recall",
-    "ground_truth": "RLHF（人类反馈强化学习）包含三个阶段：1）监督微调（SFT）：用高质量的人类标注数据微调基础模型；2）奖励模型训练：收集人类对模型输出的偏好排序，训练奖励模型；3）PPO强化学习优化：使用奖励模型的打分作为反馈信号，通过PPO算法优化策略模型。"
+    "ground_truth": "RLHF（人类反馈强化学习）包含三个阶段：1）监督微调（SFT）：用高质量的人类标注数据微调基础模型；2）奖励模型训练：收集人类对模型输出的偏好排序，训练奖励模型；3）PPO强化学习优化：使用奖励模型的打分作为反馈信号，通过PPO算法优化策略模型。",
+    "source": "questions.md"
   },
   {
+    "id": "recall_004",
+    "type": "recall",
+    "category": "LLM",
     "question": "MoE 是如何工作的？",
-    "type": "recall",
-    "ground_truth": "MoE（混合专家模型）通过门控网络动态选择专家子网络处理输入。每个专家负责处理输入的不同部分，门控网络根据输入特征决定激活哪些专家。这使得模型可以在增加参数量的同时保持计算量可控，实现高效扩展。"
+    "ground_truth": "MoE（混合专家模型）通过门控网络动态选择专家子网络处理输入。每个专家负责处理输入的不同部分，门控网络根据输入特征决定激活哪些专家。这使得模型可以在增加参数量的同时保持计算量可控，实现高效扩展。",
+    "source": "questions.md"
   },
   {
+    "id": "recall_005",
+    "type": "recall",
+    "category": "LLM",
     "question": "LoRA 微调的原理是什么？",
+    "ground_truth": "LoRA（低秩适配）通过在预训练权重矩阵旁边添加低秩分解矩阵来进行微调。具体做法是将权重更新分解为两个低秩矩阵 A 和 B 的乘积，只训练这两个小矩阵，而冻结原始权重。这大大减少了需要训练的参数量，同时保持了较好的微调效果。",
+    "source": "questions.md"
+  },
+  {
+    "id": "recall_006",
     "type": "recall",
-    "ground_truth": "LoRA（低秩适配）通过在预训练权重矩阵旁边添加低秩分解矩阵来进行微调。具体做法是将权重更新分解为两个低秩矩阵 A 和 B 的乘积，只训练这两个小矩阵，而冻结原始权重。这大大减少了需要训练的参数量，同时保持了较好的微调效果。"
+    "category": "VLM",
+    "question": "Vision-Language Model 是如何对齐视觉和语言的？",
+    "ground_truth": "VLM 通过视觉编码器（如 ViT、CLIP）将图像转换为视觉 token，然后通过投影层（通常是 MLP）将视觉 token 映射到语言模型的 embedding 空间，使得视觉信息和文本 token 可以在同一个 LLM 中被联合处理。常见方法包括 LLaVA、Qwen-VL、GPT-4V 等。",
+    "source": "questions.md"
   },
   {
+    "id": "recall_007",
+    "type": "recall",
+    "category": "Agent",
+    "question": "ReAct 框架的原理是什么？",
+    "ground_truth": "ReAct（Reasoning + Acting）框架通过将思考（Thought）和行动（Action）交替进行来完成任务。模型先进行推理，决定下一步行动；执行该行动（调用工具或 API）；获得观察（Observation）；再基于观察进行下一步推理。形成 Thought → Action → Observation 的循环，直到任务完成。",
+    "source": "questions.md"
+  },
+  {
+    "id": "recall_008",
+    "type": "recall",
+    "category": "Agent",
+    "question": "Function Calling 是怎么实现的？",
+    "ground_truth": "Function Calling 通过预定义的工具 schema（函数名、参数、描述）让 LLM 在对话中识别出需要调用工具的意图，并返回结构化的函数调用请求（参数 JSON）。应用层接收到请求后执行实际函数，将结果返回给 LLM 进行下一轮生成。OpenAI、智谱、Anthropic 等都支持 Function Calling。",
+    "source": "questions.md"
+  },
+  {
+    "id": "recall_009",
+    "type": "recall",
+    "category": "RAG",
+    "question": "BM25 算法的核心思想是什么？",
+    "ground_truth": "BM25 是基于词频和文档长度的经典检索算法。它通过 TF（词频）、IDF（逆文档频率）和文档长度归一化来计算查询和文档的相关性分数。BM25 在关键词匹配场景下效果稳定，常与向量检索结合形成混合检索。",
+    "source": "questions.md"
+  },
+  {
+    "id": "recall_010",
+    "type": "recall",
+    "category": "RAG",
+    "question": "Reranker 在 RAG 系统中起什么作用？",
+    "ground_truth": "Reranker（重排序器）通常是基于 Cross-Encoder 的模型，在初步检索（如向量检索 + BM25）之后对 top-k 文档进行精细排序。它能更准确地评估 query 和文档的语义相关性，提升最终送入 LLM 的上下文质量。常见模型包括 bge-reranker、cohere-rerank 等。",
+    "source": "questions.md"
+  },
+  {
+    "id": "recall_011",
+    "type": "recall",
+    "category": "LLM",
+    "question": "KV Cache 是什么？为什么能加速推理？",
+    "ground_truth": "KV Cache 缓存了 Transformer 自注意力中每层每个 token 的 Key 和 Value 矩阵。在自回归生成时，新 token 只需计算自己的 Q，与缓存的 K/V 计算注意力，避免了对历史 token 的重复计算。代价是显存占用增加，序列越长 KV Cache 越大。",
+    "source": "questions.md"
+  },
+  {
+    "id": "recall_012",
+    "type": "recall",
+    "category": "LLM",
+    "question": "什么是 Speculative Decoding？",
+    "ground_truth": "Speculative Decoding（推测解码）使用一个小的 draft model 快速生成多个候选 token，然后让大模型并行验证这些候选 token。如果候选被大模型接受（概率一致），则一次性输出多个 token；否则回退到第一个不匹配的 token。该方法可以显著加速推理而不改变输出分布。",
+    "source": "questions.md"
+  },
+  {
+    "id": "paraphrase_001",
+    "type": "paraphrase",
+    "category": "LLM",
     "question": "大模型如何处理长文本输入？",
-    "type": "paraphrase",
-    "ground_truth": "处理长文本的主要方法包括：1）位置编码外推（如RoPE的NTK-aware scaling）；2）滑动窗口注意力；3）稀疏注意力机制；4）分块处理加全局信息汇总；5）KV-cache优化。不同方法在计算复杂度和效果之间有不同权衡。"
+    "ground_truth": "处理长文本的主要方法包括：1）位置编码外推（如RoPE的NTK-aware scaling）；2）滑动窗口注意力；3）稀疏注意力机制；4）分块处理加全局信息汇总；5）KV-cache优化。不同方法在计算复杂度和效果之间有不同权衡。",
+    "source": "questions.md"
   },
   {
+    "id": "paraphrase_002",
+    "type": "paraphrase",
+    "category": "RAG",
     "question": "向量数据库在 AI 应用中起什么作用？",
+    "ground_truth": "向量数据库用于存储和检索高维向量表示，支持高效的相似性搜索。在AI应用中主要用于：语义搜索、推荐系统、RAG系统中的文档检索、图像检索等。常用索引算法包括HNSW、IVF等，支持余弦相似度、欧氏距离等度量。",
+    "source": "questions.md"
+  },
+  {
+    "id": "paraphrase_003",
     "type": "paraphrase",
-    "ground_truth": "向量数据库用于存储和检索高维向量表示，支持高效的相似性搜索。在AI应用中主要用于：语义搜索、推荐系统、RAG系统中的文档检索、图像检索等。常用索引算法包括HNSW、IVF等，支持余弦相似度、欧氏距离等度量。"
+    "category": "RAG",
+    "question": "请解释下 RAG 检索阶段是怎么做的",
+    "ground_truth": "RAG 检索阶段的核心是：用户提问 → 问题向量化 → 在向量库中找最相似的 top-k 文档块 → 也可以结合 BM25 关键词检索（混合检索）→ 对结果做重排序（rerank）→ 选出最相关的 N 个文档块送入 LLM。",
+    "source": "questions.md"
   },
   {
+    "id": "paraphrase_004",
+    "type": "paraphrase",
+    "category": "LLM",
+    "question": "说说 self-attention 怎么算的",
+    "ground_truth": "self-attention 计算步骤：1）输入序列每个位置生成 Q、K、V 三个向量；2）计算注意力分数 Attention(Q,K,V) = softmax(QK^T / sqrt(d_k))V；3）多头机制将多个注意力头的输出拼接。Self-attention 让序列中每个位置都能关注所有其他位置，捕捉长距离依赖。",
+    "source": "questions.md"
+  },
+  {
+    "id": "paraphrase_005",
+    "type": "paraphrase",
+    "category": "RLHF",
+    "question": "PPO 算法在大模型训练里怎么用？",
+    "ground_truth": "PPO（Proximal Policy Optimization）在 RLHF 中用于根据奖励模型的反馈优化 LLM。具体做法：LLM 作为 policy，输入 prompt 输出 response，奖励模型给 response 打分；PPO 用 clipped objective 限制策略更新幅度，防止训练崩溃。常用技巧包括 KL 散度惩罚、value baseline 等。",
+    "source": "questions.md"
+  },
+  {
+    "id": "paraphrase_006",
+    "type": "paraphrase",
+    "category": "LLM",
+    "question": "量化推理是怎么回事？",
+    "ground_truth": "量化推理是将模型权重和/或激活从高精度（FP16/FP32）转换为低精度（INT8/INT4）的过程。低精度减少显存占用、加速矩阵乘法，但会引入精度损失。常见方法包括：GPTQ（训练后量化）、AWQ（激活感知量化）、SmoothQuant（平滑异常值）等。",
+    "source": "questions.md"
+  },
+  {
+    "id": "cross_category_001",
+    "type": "cross_category",
+    "category": "Eval",
     "question": "如何评估一个对话系统的质量？",
-    "type": "cross_category",
-    "ground_truth": "评估对话系统质量的指标包括：1）自动指标：BLEU、ROUGE、Perplexity；2）人工评估：流畅度、相关性、一致性；3）任务型指标：任务完成率、对话轮数；4）安全性指标：有害内容检测。综合评估需要结合多种方法。"
+    "ground_truth": "评估对话系统质量的指标包括：1）自动指标：BLEU、ROUGE、Perplexity；2）人工评估：流畅度、相关性、一致性；3）任务型指标：任务完成率、对话轮数；4）安全性指标：有害内容检测。综合评估需要结合多种方法。",
+    "source": "questions.md"
   },
   {
+    "id": "cross_category_002",
+    "type": "cross_category",
+    "category": "LLM",
     "question": "大模型的推理优化有哪些常见方法？",
-    "type": "cross_category",
-    "ground_truth": "常见的推理优化方法包括：1）KV-cache减少重复计算；2）量化（INT8/INT4）降低内存占用；3）推测解码（Speculative Decoding）加速生成；4）连续批处理（Continuous Batching）提高吞吐；5）模型并行和流水线并行；6）FlashAttention优化注意力计算。"
+    "ground_truth": "常见的推理优化方法包括：1）KV-cache减少重复计算；2）量化（INT8/INT4）降低内存占用；3）推测解码（Speculative Decoding）加速生成；4）连续批处理（Continuous Batching）提高吞吐；5）模型并行和流水线并行；6）FlashAttention优化注意力计算。",
+    "source": "questions.md"
   },
   {
+    "id": "cross_category_003",
+    "type": "cross_category",
+    "category": "VLM",
     "question": "多模态大模型是如何处理不同类型输入的？",
-    "type": "cross_category",
-    "ground_truth": "多模态大模型通过模态编码器将不同类型输入（文本、图像、音频）转换为统一的向量表示，然后通过跨模态注意力机制或投影层将它们融合到共享的语义空间中。常见的架构包括使用CLIP等编码器将图像编码后与文本token拼接输入LLM。"
+    "ground_truth": "多模态大模型通过模态编码器将不同类型输入（文本、图像、音频）转换为统一的向量表示，然后通过跨模态注意力机制或投影层将它们融合到共享的语义空间中。常见的架构包括使用CLIP等编码器将图像编码后与文本token拼接输入LLM。",
+    "source": "questions.md"
   },
   {
+    "id": "cross_category_004",
+    "type": "cross_category",
+    "category": "Prompt",
     "question": "什么是 Prompt Engineering？有哪些技巧？",
+    "ground_truth": "Prompt Engineering是通过设计输入提示来引导大模型产生期望输出的技术。常见技巧包括：1）Few-shot learning提供示例；2）Chain-of-Thought引导推理；3）角色设定；4）格式化输出约束；5）Self-consistency多路径验证；6）Tree-of-Thought树形推理。",
+    "source": "questions.md"
+  },
+  {
+    "id": "cross_category_005",
     "type": "cross_category",
-    "ground_truth": "Prompt Engineering是通过设计输入提示来引导大模型产生期望输出的技术。常见技巧包括：1）Few-shot learning提供示例；2）Chain-of-Thought引导推理；3）角色设定；4）格式化输出约束；5）Self-consistency多路径验证；6）Tree-of-Thought树形推理。"
+    "category": "Agent",
+    "question": "Multi-Agent 系统是如何协作的？",
+    "ground_truth": "Multi-Agent 系统通过多个具有不同角色和能力的 Agent 协作完成任务。常见模式：1）层级式：一个 manager Agent 调度多个 worker Agent；2）辩论式：多个 Agent 对同一问题给出方案并相互评估；3）流水线式：Agent 按顺序处理，每个 Agent 的输出是下个 Agent 的输入。框架如 AutoGen、MetaGPT、CrewAI。",
+    "source": "questions.md"
   },
   {
+    "id": "cross_category_006",
+    "type": "cross_category",
+    "category": "VectorDB",
+    "question": "HNSW 索引的工作原理是什么？",
+    "ground_truth": "HNSW（Hierarchical Navigable Small World）是基于图的近似最近邻索引算法。它构建多层图：底层包含所有数据点，上层是稀疏的导航点。查询时从顶层开始贪心搜索找到最近邻，然后降到下一层继续搜索。HNSW 在召回率和查询速度之间取得平衡，是向量数据库的常用索引。",
+    "source": "questions.md"
+  },
+  {
+    "id": "irrelevant_001",
+    "type": "irrelevant",
+    "category": "None",
     "question": "如何用微波炉烤面包？",
-    "type": "irrelevant",
-    "ground_truth": "这个问题与面试题库无关，系统应该返回兜底回答，表示无法从知识库中找到相关信息。"
+    "ground_truth": "这个问题与面试题库无关，系统应该返回兜底回答，表示无法从知识库中找到相关信息。",
+    "source": "manual"
   },
   {
-    "question": "今天天气怎么样？",
+    "id": "irrelevant_002",
     "type": "irrelevant",
-    "ground_truth": "这个问题与面试题库无关，系统应该返回兜底回答。"
+    "category": "None",
+    "question": "今天天气怎么样？",
+    "ground_truth": "这个问题与面试题库无关，系统应该返回兜底回答。",
+    "source": "manual"
+  },
+  {
+    "id": "irrelevant_003",
+    "type": "irrelevant",
+    "category": "None",
+    "question": "法国的首都是哪里？",
+    "ground_truth": "这个问题与面试题库无关，应返回兜底。",
+    "source": "manual"
+  },
+  {
+    "id": "irrelevant_004",
+    "type": "irrelevant",
+    "category": "None",
+    "question": "推荐一家好吃的中餐馆",
+    "ground_truth": "这个问题与面试题库无关，应返回兜底。",
+    "source": "manual"
+  },
+  {
+    "id": "irrelevant_005",
+    "type": "irrelevant",
+    "category": "None",
+    "question": "怎么做番茄炒蛋？",
+    "ground_truth": "这个问题与面试题库无关，应返回兜底。",
+    "source": "manual"
+  },
+  {
+    "id": "irrelevant_006",
+    "type": "irrelevant",
+    "category": "None",
+    "question": "今天股票市场行情如何？",
+    "ground_truth": "这个问题与面试题库无关，应返回兜底。",
+    "source": "manual"
   }
 ]
