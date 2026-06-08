@@ -110,6 +110,16 @@ class VectorStore:
         )
         logger.info("已清空所有文档")
 
+    def delete_by_id(self, question_id: str) -> bool:
+        """根据 ID 删除单条向量
+
+        Returns:
+            True 表示成功（ChromaDB 不会因 ID 不存在而报错）
+        """
+        self.collection.delete(ids=[question_id])
+        logger.info(f"已删除 ChromaDB 文档: {question_id}")
+        return True
+
     def get_all(self) -> dict:
         """获取所有文档"""
         return self.collection.get(include=["documents", "metadatas"])

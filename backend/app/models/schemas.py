@@ -66,6 +66,61 @@ class StatsResponse(BaseModel):
     last_updated: str | None = Field(description="最后更新时间")
 
 
+# =========================================================================
+# 知识库管理 UI
+# =========================================================================
+
+
+class QuestionListResponse(BaseModel):
+    """题目列表响应"""
+    items: list[Question] = Field(default_factory=list, description="题目列表")
+    total: int = Field(description="总数")
+    page: int = Field(description="当前页（1-based）")
+    size: int = Field(description="页大小")
+    categories: list[str] = Field(default_factory=list, description="所有分类")
+
+
+class InsertOneRequest(BaseModel):
+    """单条插入请求（撤销机制用）"""
+    question: str = Field(min_length=1, description="题面")
+    answer: str = Field(min_length=1, description="参考答案")
+    category: str = Field(default="未分类", description="分类")
+    difficulty: str = Field(default="中等", description="难度")
+    source: str = Field(default="manual", description="来源标识")
+
+
+class IngestTaskAccepted(BaseModel):
+    """异步导入任务已受理"""
+    task_id: str = Field(description="任务 ID")
+
+
+class TaskStatusResponse(BaseModel):
+    """任务状态响应"""
+    task_id: str
+    status: str = Field(description="pending|running|done|failed")
+    source_type: str
+    source: str
+    total: int = 0
+    done: int = 0
+    ingested: int = 0
+    duplicates: int = 0
+    errors: int = 0
+    started_at: str = ""
+    finished_at: str | None = None
+    error_message: str | None = None
+
+
+class TaskListResponse(BaseModel):
+    """任务列表响应"""
+    tasks: list[TaskStatusResponse] = Field(default_factory=list)
+
+
+class DeleteQuestionResponse(BaseModel):
+    """删除响应"""
+    deleted: bool
+    id: str
+
+
 class ErrorResponse(BaseModel):
     """错误响应"""
     detail: str = Field(description="错误描述")

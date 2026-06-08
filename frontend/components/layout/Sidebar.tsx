@@ -1,5 +1,6 @@
 'use client'
 
+import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import type { StatsResponse } from '@/lib/types'
 import type { Conversation } from '@/hooks/useConversations'
@@ -22,7 +23,18 @@ export function Sidebar({
   conversations, currentId,
   onCreateConversation, onSwitchConversation, onDeleteConversation,
 }: SidebarProps) {
-  const [activeTab, setActiveTab] = useState<Tab>('conversations')
+  const router = useRouter()
+  const pathname = usePathname()
+  // /kb 路由对应知识库 Tab，其他路径对应对话 Tab
+  const activeTab: Tab = pathname?.startsWith('/kb') ? 'knowledge' : 'conversations'
+
+  const handleTabClick = (tab: Tab) => {
+    if (tab === 'conversations') {
+      router.push('/')
+    } else {
+      router.push('/kb')
+    }
+  }
 
   return (
     <>
@@ -80,7 +92,7 @@ export function Sidebar({
           {(['conversations', 'knowledge'] as Tab[]).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => handleTabClick(tab)}
               className="flex-1 py-2 text-xs font-medium rounded-lg transition-all"
               style={{
                 background: activeTab === tab ? 'var(--cream)' : 'transparent',

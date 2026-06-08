@@ -8,8 +8,10 @@ import logging
 from pathlib import Path
 
 from app.config import get_settings
+from app.core.db import get_db
+from app.core.exceptions import ValidationError
+from app.core.path_guard import validate_safe_path
 from app.core.vectorstore import VectorStore
-from app.models.database import Database
 from app.models.schemas import Question
 from app.parsers.md_parser import parse_md_file, parse_md_content
 from app.parsers.pdf_parser import parse_pdf, parse_pdf_content
@@ -23,26 +25,34 @@ class IngestService:
 
     def __init__(self):
         self.vector_store = VectorStore()
-        self.db = Database()
+        self.db = get_db()
         self.settings = get_settings()
 
     async def ingest_md(self, file_path: str) -> dict:
-        """导入 MD 文件"""
-        questions = parse_md_file(file_path)
+        """导入 MD 文件（服务端路径，必须在 data/ 白名单内）"""
+        try:
+            safe_path = validate_safe_path(file_path)
+        except Exception as e:
+            raise ValidationError(f"路径不安全: {e}")
+        questions = parse_md_file(str(safe_path))
         return self._ingest_questions(questions)
 
     async def ingest_md_content(self, content: str, filename: str) -> dict:
-        """导入 MD 内容"""
+        """导入 MD 内容（前端上传，已经过 Multipart 边界校验）"""
         questions = parse_md_content(content, source=filename)
         return self._ingest_questions(questions)
 
     async def ingest_pdf(self, file_path: str) -> dict:
-        """导入 PDF 文件"""
-        questions = parse_pdf(file_path)
+        """导入 PDF 文件（服务端路径，必须在 data/ 白名单内）"""
+        try:
+            safe_path = validate_safe_path(file_path)
+        except Exception as e:
+            raise ValidationError(f"路径不安全: {e}")
+        questions = parse_pdf(str(safe_path))
         return self._ingest_questions(questions)
 
     async def ingest_pdf_content(self, content: bytes, filename: str) -> dict:
-        """导入 PDF 内容"""
+        """导入 PDF 内容（前端上传）"""
         questions = parse_pdf_content(content, filename)
         return self._ingest_questions(questions)
 

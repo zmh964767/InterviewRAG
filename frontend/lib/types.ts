@@ -65,3 +65,72 @@ export interface StreamEvent {
   sources?: SourceRef[]
   error?: string
 }
+
+// =========================================================================
+// 知识库管理
+// =========================================================================
+
+export interface Question {
+  id: string
+  question: string
+  answer: string
+  category: string
+  difficulty: string
+  source: string
+  tags: string[]
+  created_at: string
+}
+
+export interface QuestionListRequest {
+  page?: number
+  size?: number
+  q?: string
+  category?: string
+  difficulty?: string
+}
+
+export interface QuestionListResponse {
+  items: Question[]
+  total: number
+  page: number
+  size: number
+  categories: string[]
+}
+
+export interface DeleteQuestionResponse {
+  deleted: boolean
+  id: string
+}
+
+export interface InsertOneRequest {
+  question: string
+  answer: string
+  category?: string
+  difficulty?: string
+  source?: string
+}
+
+export type TaskStatus = 'pending' | 'running' | 'done' | 'failed'
+
+export interface TaskStatusResponse {
+  task_id: string
+  status: TaskStatus
+  source_type: string
+  source: string
+  total: number
+  done: number
+  ingested: number
+  duplicates: number
+  errors: number
+  started_at: string
+  finished_at: string | null
+  error_message: string | null
+}
+
+export interface TaskListResponse {
+  tasks: TaskStatusResponse[]
+}
+
+export interface IngestTaskAccepted {
+  task_id: string
+}
