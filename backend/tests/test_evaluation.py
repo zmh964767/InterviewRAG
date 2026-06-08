@@ -36,51 +36,74 @@ class TestQuestionMatch:
 
 class TestHitRateAtK:
     def test_hit_at_position_1(self):
-        docs = ["题目：Transformer 的自注意力机制\n答案：...", "题目：其他\n答案：..."]
-        assert hit_rate_at_k(docs, "Transformer 的自注意力机制是如何工作的？", k=5) is True
+        docs = ["题目：请详细解释 Transformer 模型中的自注意力机制是如何工作的\n答案：自注意力通过计算 Q K V 得到权重"]
+        assert hit_rate_at_k(docs, "Transformer 的自注意力机制是怎么算的", k=5) is True
 
     def test_hit_at_position_3(self):
-        docs = ["题目：其他1\n...", "题目：其他2\n...", "题目：自注意力机制\n..."]
-        assert hit_rate_at_k(docs, "自注意力机制如何工作？", k=5) is True
+        docs = [
+            "题目：什么是 Python 装饰器\n答案：装饰器是一种函数",
+            "题目：RAG 的基本流程是什么\n答案：检索增强生成",
+            "题目：请解释 Transformer 中的自注意力机制\n答案：自注意力计算 Q K V",
+        ]
+        assert hit_rate_at_k(docs, "Transformer 的注意力机制", k=5) is True
 
     def test_miss(self):
-        docs = ["题目：Python 装饰器\n...", "题目：RAG 流程\n...", "题目：RLHF\n..."]
-        assert hit_rate_at_k(docs, "MoE 是什么？", k=5) is False
+        docs = [
+            "题目：什么是 Python 装饰器\n答案：装饰器是一种函数",
+            "题目：RAG 的基本流程是什么\n答案：检索增强生成",
+            "题目：RLHF 的训练流程\n答案：强化学习人类反馈",
+        ]
+        assert hit_rate_at_k(docs, "MoE 混合专家模型的工作原理", k=5) is False
 
     def test_hit_beyond_k(self):
-        docs = ["题目：其他1\n...", "题目：其他2\n...", "题目：其他3\n...", "题目：自注意力机制\n..."]
-        assert hit_rate_at_k(docs, "自注意力机制如何工作？", k=3) is False
+        docs = [
+            "题目：什么是 Python 装饰器\n答案：装饰器",
+            "题目：RAG 的基本流程\n答案：检索增强生成",
+            "题目：RLHF 的训练流程\n答案：强化学习",
+            "题目：Transformer 的自注意力机制\n答案：自注意力计算",
+        ]
+        assert hit_rate_at_k(docs, "Transformer 的自注意力机制", k=3) is False
 
     def test_empty_retrieved(self):
-        assert hit_rate_at_k([], "Transformer", k=5) is False
+        assert hit_rate_at_k([], "Transformer 自注意力", k=5) is False
 
 
 class TestMRR:
     def test_rank_1(self):
-        docs = ["题目：Transformer\n...", "题目：其他\n..."]
-        assert mrr(docs, "Transformer 是什么？") == 1.0
+        docs = ["题目：Transformer 的自注意力机制是如何工作的\n答案：自注意力计算"]
+        assert mrr(docs, "Transformer 的注意力机制怎么算") == 1.0
 
     def test_rank_2(self):
-        docs = ["题目：其他\n...", "题目：Transformer\n..."]
-        assert mrr(docs, "Transformer 是什么？") == 0.5
+        docs = [
+            "题目：什么是 Python 装饰器\n答案：装饰器",
+            "题目：Transformer 的自注意力机制\n答案：自注意力计算",
+        ]
+        assert mrr(docs, "Transformer 的注意力机制") == 0.5
 
     def test_rank_3(self):
-        docs = ["题目：其他1\n...", "题目：其他2\n...", "题目：Transformer\n..."]
-        assert mrr(docs, "Transformer 是什么？") == pytest.approx(1 / 3)
+        docs = [
+            "题目：Python 装饰器\n答案：装饰器",
+            "题目：RAG 流程\n答案：检索增强生成",
+            "题目：Transformer 的自注意力机制\n答案：自注意力",
+        ]
+        assert mrr(docs, "Transformer 的注意力机制") == pytest.approx(1 / 3)
 
     def test_miss(self):
-        docs = ["题目：Python\n...", "题目：RAG\n..."]
-        assert mrr(docs, "MoE 是什么？") == 0.0
+        docs = [
+            "题目：Python 装饰器\n答案：装饰器",
+            "题目：RAG 流程\n答案：检索增强生成",
+        ]
+        assert mrr(docs, "MoE 混合专家模型") == 0.0
 
     def test_empty(self):
-        assert mrr([], "Transformer") == 0.0
+        assert mrr([], "Transformer 自注意力") == 0.0
 
 
 class TestComputeRetrievalMetrics:
     def test_all_hits(self):
         results = [
-            {"retrieved_texts": ["题目：Transformer\n答案：A"], "eval_question": "Transformer 是什么？"},
-            {"retrieved_texts": ["题目：其他\n...", "题目：Transformer\n答案：A"], "eval_question": "Transformer 是什么？"},
+            {"retrieved_texts": ["题目：Transformer 的自注意力机制\n答案：A"], "eval_question": "Transformer 的注意力机制怎么算"},
+            {"retrieved_texts": ["题目：Python 装饰器\n...", "题目：Transformer 的自注意力机制\n答案：A"], "eval_question": "Transformer 的注意力机制怎么算"},
         ]
         m = compute_retrieval_metrics(results, k=2)
         assert m["hit_rate@2"] == 1.0
@@ -88,8 +111,8 @@ class TestComputeRetrievalMetrics:
 
     def test_partial_hit(self):
         results = [
-            {"retrieved_texts": ["题目：Transformer\n答案：A"], "eval_question": "Transformer 是什么？"},
-            {"retrieved_texts": ["题目：Python\n...", "题目：RAG\n..."], "eval_question": "MoE 是什么？"},
+            {"retrieved_texts": ["题目：Transformer 的自注意力机制\n答案：A"], "eval_question": "Transformer 的注意力机制怎么算"},
+            {"retrieved_texts": ["题目：Python 装饰器\n...", "题目：RAG 流程\n..."], "eval_question": "MoE 混合专家模型"},
         ]
         m = compute_retrieval_metrics(results, k=5)
         assert m["hit_rate@5"] == 0.5
@@ -101,13 +124,11 @@ class TestComputeRetrievalMetrics:
         assert m["mrr"] == 0.0
 
     def test_skips_empty_question(self):
-        # eval_question 为空时跳过该题
         results = [
-            {"retrieved_texts": ["题目：Transformer\n答案：A"], "eval_question": "Transformer 是什么？"},
-            {"retrieved_texts": ["题目：Transformer\n答案：A"], "eval_question": ""},
+            {"retrieved_texts": ["题目：Transformer 的自注意力机制\n答案：A"], "eval_question": "Transformer 的注意力机制怎么算"},
+            {"retrieved_texts": ["题目：Transformer 的自注意力机制\n答案：A"], "eval_question": ""},
         ]
         m = compute_retrieval_metrics(results, k=5)
-        # 分母仍是 2，无效题不影响
         assert m["hit_rate@5"] == 0.5
 
 
