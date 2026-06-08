@@ -88,3 +88,41 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: RAG 评估体系实现
+
+**Date**: 2026-06-08
+**Task**: RAG 评估体系实现
+**Branch**: `master`
+
+### Summary
+
+实现完整 RAG 评估体系：RAGAS 0.4.3 集成（智谱 AsyncOpenAI + llm_factory）、检索指标（Hit Rate/MRR 关键词匹配）、回归检测（latest.json + history 归档）、CLI 入口（--mode full/ragas/comparison/sanity）、改写题目评估数据集。Baseline: faithfulness=0.667, answer_relevancy=0.717, 混合检索 HR@5=0.3529 > 纯向量 0.2353。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `dad269f` | (see git log) |
+| `1c4a77e` | (see git log) |
+| `485c09c` | (see git log) |
+| `c8b27fc` | (see git log) |
+| `003f0c1` | (see git log) |
+| `158e4c2` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
