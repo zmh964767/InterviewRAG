@@ -22,8 +22,12 @@ class BGEReranker:
         if self._loaded:
             return
         self._loaded = True
+        # 评估场景可通过 SKIP_RERANKER=1 跳过加载（Windows 加载卡死）
+        import os
+        if os.environ.get("SKIP_RERANKER", "").lower() in ("1", "true", "yes"):
+            logger.info("SKIP_RERANKER 已设置，跳过 Re-ranker 加载")
+            return
         try:
-            import os
             from pathlib import Path
             # 检查模型是否已缓存（避免首次查询时下载 1.1GB）
             cache_dir = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))

@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     # LLM 参数
     llm_model: str = "glm-4-flash"
     llm_temperature: float = 0.7
-    llm_max_tokens: int = 2048
+    llm_max_tokens: int = 8192
 
     # Embedding 参数
     embedding_model: str = "embedding-3"

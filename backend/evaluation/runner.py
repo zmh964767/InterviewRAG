@@ -43,38 +43,45 @@ async def _evaluate_v04(
 ) -> dict:
     """RAGAS 0.4+ 单题接口 + asyncio.gather 并发
 
-    对每题调 4 个 metric 的 single_turn_ascore，5 路并发。
+    对每题调 4 个 metric 的 ascore，5 路并发。
     """
-    from ragas.dataset_schema import EvaluationDataset, SingleTurnSample
-
     n = len(ragas_data["question"])
-    sem = asyncio.Semaphore(5)
+    sem = asyncio.Semaphore(2)  # RAGAS metrics 不是线程安全的，限制并发
 
     async def score_one(idx: int):
         async with sem:
-            sample = SingleTurnSample(
-                user_input=ragas_data["question"][idx],
-                response=ragas_data["answer"][idx],
-                retrieved_contexts=ragas_data["contexts"][idx],
-                reference=ragas_data["ground_truth"][idx],
-            )
+            question = ragas_data["question"][idx]
+            answer = ragas_data["answer"][idx]
+            contexts = ragas_data["contexts"][idx]
+
+            def _safe_score(result):
+                if result is None:
+                    return 0.0
+                try:
+                    return float(result.value) if hasattr(result, 'value') else float(result)
+                except Exception:
+                    return 0.0
+
             try:
-                f = await faithfulness_m.single_turn_ascore(sample)
+                f = _safe_score(await faithfulness_m.ascore(question, answer, contexts))
             except Exception as e:
                 logger.warning(f"题目 {idx} faithfulness 失败: {e}")
                 f = 0.0
             try:
-                a = await answer_relevancy_m.single_turn_ascore(sample)
+                # AnswerRelevancy.ascore(user_input, response) — 只需要 2 个参数
+                a = _safe_score(await answer_relevancy_m.ascore(question, answer))
             except Exception as e:
                 logger.warning(f"题目 {idx} answer_relevancy 失败: {e}")
                 a = 0.0
             try:
-                cp = await context_precision_m.single_turn_ascore(sample)
+                # ContextPrecision.ascore(user_input, reference, retrieved_contexts)
+                cp = _safe_score(await context_precision_m.ascore(question, answer, contexts))
             except Exception as e:
                 logger.warning(f"题目 {idx} context_precision 失败: {e}")
                 cp = 0.0
             try:
-                cr = await context_recall_m.single_turn_ascore(sample)
+                # ContextRecall.ascore(user_input, retrieved_contexts, reference)
+                cr = _safe_score(await context_recall_m.ascore(question, contexts, answer))
             except Exception as e:
                 logger.warning(f"题目 {idx} context_recall 失败: {e}")
                 cr = 0.0
@@ -173,17 +180,28 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
     try:
         if ragas_v04:
             # RAGAS 0.4+：单题接口 + asyncio.gather 并发
+            from evaluation.zhipu_llm import create_zhipu_client
+            openai_client = create_zhipu_client()  # 默认 AsyncOpenAI
+            settings = __import__('app.config', fromlist=['get_settings']).get_settings()
+
+            from ragas.llms.base import InstructorModelArgs
             from ragas.llms import llm_factory
+            from ragas.embeddings import OpenAIEmbeddings
 
-            ragas_llm = llm_factory("gpt-4o-mini", client=llm) if False else llm
-            # 直接用 langchain ChatOpenAI 包为 ragas LLM
-            from ragas.llms import LangchainLLMWrapper
-            wrapped = LangchainLLMWrapper(llm)
+            ragas_llm = llm_factory(settings.llm_model, client=openai_client)
+            ragas_emb = OpenAIEmbeddings(model=settings.embedding_model, client=openai_client)
 
-            faithfulness_m = _Faithfulness(llm=wrapped)
-            answer_relevancy_m = _AnswerRelevancy(llm=wrapped)
-            context_precision_m = _ContextPrecision(llm=wrapped)
-            context_recall_m = _ContextRecall(llm=wrapped)
+            # 设置 max_tokens=8192（RAGAS 默认 1024，会导致 faithfulness 输出被截断）
+            try:
+                ragas_llm.model_args.max_tokens = 8192
+                ragas_llm.model_args.temperature = 0.0
+            except Exception:
+                logger.warning("无法设置 ragas_llm.max_tokens，faithfulness 评估可能被截断")
+
+            faithfulness_m = _Faithfulness(llm=ragas_llm)
+            answer_relevancy_m = _AnswerRelevancy(llm=ragas_llm, embeddings=ragas_emb)
+            context_precision_m = _ContextPrecision(llm=ragas_llm)
+            context_recall_m = _ContextRecall(llm=ragas_llm)
 
             aggregated = await _evaluate_v04(
                 ragas_data, faithfulness_m, answer_relevancy_m,
@@ -256,8 +274,13 @@ async def run_comparison_evaluation(items: list[dict]) -> dict:
     async def plan_c(question: str) -> dict:
         """方案 C：混合检索 + Re-ranking"""
         results = hybrid_retriever.retrieve(query=question, top_k=20)
-        if reranker.is_available():
-            results = reranker.rerank(query=question, documents=results, top_k=5)
+        # BGE Re-ranker 在 Windows 上加载极慢，单独 try/except 隔离
+        try:
+            if reranker.is_available():
+                results = reranker.rerank(query=question, documents=results, top_k=5)
+        except Exception as e:
+            logger.warning(f"Re-ranker 失败（plan_c），退回 top-5: {e}")
+            results = results[:5]
         return {"sources": results[:5]}
 
     async def plan_d(question: str) -> dict:
@@ -272,6 +295,18 @@ async def run_comparison_evaluation(items: list[dict]) -> dict:
         "D_小块检索大块生成": plan_d,
     }
 
+    # BGE Re-ranker 在某些环境加载极慢（>5 分钟），先预检一次
+    rerank_disabled = False
+    try:
+        if not reranker.is_available():
+            rerank_disabled = True
+            logger.warning("BGE Re-ranker 不可用，plan_c 将与 plan_b 退化为相同结果")
+    except Exception:
+        rerank_disabled = True
+
+    if rerank_disabled:
+        plans = {k: v for k, v in plans.items() if k != "C_混合+Rerank"}
+
     sem = asyncio.Semaphore(CONCURRENCY)
 
     async def run_plan(name: str, plan_fn):
@@ -280,10 +315,10 @@ async def run_comparison_evaluation(items: list[dict]) -> dict:
             for item in items:
                 try:
                     r = await plan_fn(item["question"])
-                    ids = [s.get("id", "") for s in r.get("sources", []) if isinstance(s, dict)]
+                    texts = [s.get("text", "") for s in r.get("sources", []) if isinstance(s, dict)]
                     plan_results.append({
-                        "retrieved_ids": ids,
-                        "relevant_id": item.get("id", ""),
+                        "retrieved_texts": texts,
+                        "eval_question": item["question"],
                     })
                 except Exception as e:
                     logger.error(f"方案 {name} 题目 {item.get('id', '?')} 失败: {e}")

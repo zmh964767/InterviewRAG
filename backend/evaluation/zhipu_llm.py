@@ -1,10 +1,9 @@
 """智谱 LLM 适配层
 
-将智谱 GLM API 包装为 langchain ChatOpenAI，
-供 RAGAS 0.1.x 评估的 LLM judge 使用。
-
-原理：智谱提供 OpenAI 兼容端点 https://open.bigmodel.cn/api/paas/v4/
-只要传 base_url 即可用 ChatOpenAI 调智谱。
+RAGAS 0.4.3 collections metrics 要求用 llm_factory + InstructorLLM，
+不接受 langchain ChatOpenAI。因此：
+- ZhipuOpenAIClient: 用 openai.OpenAI 指向智谱兼容端点
+- create_zhipu_llm(): 返回 llm_factory(llm, client) 的 InstructorLLM 实例
 """
 
 import logging
@@ -26,6 +25,28 @@ class ZhipuLLMUnavailable(RuntimeError):
     """智谱 LLM 不可用（key 缺失 / 包缺失）"""
 
 
+def create_zhipu_client(async_client: bool = True):
+    """创建 OpenAI 客户端指向智谱兼容端点
+
+    Args:
+        async_client: True 返回 AsyncOpenAI，False 返回 OpenAI
+    """
+    settings = get_settings()
+    if not settings.zhipu_api_key:
+        raise ZhipuLLMUnavailable("未配置 ZHIPU_API_KEY，请在 .env 中设置")
+
+    try:
+        from openai import AsyncOpenAI, OpenAI
+    except ImportError as e:
+        raise ZhipuLLMUnavailable("缺少 openai 包，请运行: pip install openai") from e
+
+    client_cls = AsyncOpenAI if async_client else OpenAI
+    return client_cls(
+        api_key=settings.zhipu_api_key,
+        base_url="https://open.bigmodel.cn/api/paas/v4/",
+    )
+
+
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=8),
@@ -33,37 +54,25 @@ class ZhipuLLMUnavailable(RuntimeError):
     before_sleep=before_sleep_log(logger, logging.WARNING),
     reraise=True,
 )
-def create_zhipu_llm(temperature: float = 0.0, max_tokens: int = 4096):
-    """创建智谱 LLM 实例（OpenAI 兼容模式）
-
-    Args:
-        temperature: 0.0 保证评估结果可复现
-        max_tokens: RAGAS judge 需要较长输出
+def create_zhipu_llm():
+    """创建智谱 LLM 实例（RAGAS 0.4+ InstructorLLM 接口）
 
     Returns:
-        配置好的 langchain ChatOpenAI 实例
+        ragas.llms.base.BaseRagasLLM 实例，可直接传给 RAGAS metrics
 
     Raises:
-        ZhipuLLMUnavailable: 配置缺失或 langchain-openai 未安装
+        ZhipuLLMUnavailable: 配置缺失
     """
-    settings = get_settings()
-    if not settings.zhipu_api_key:
-        raise ZhipuLLMUnavailable("未配置 ZHIPU_API_KEY，请在 .env 中设置")
-
     try:
-        from langchain_openai import ChatOpenAI
+        from ragas.llms import llm_factory
     except ImportError as e:
         raise ZhipuLLMUnavailable(
-            "缺少 langchain-openai 包，请运行: pip install langchain-openai"
+            "缺少 ragas 包，请运行: pip install ragas"
         ) from e
 
-    llm = ChatOpenAI(
-        model=settings.llm_model,
-        base_url="https://open.bigmodel.cn/api/paas/v4/",
-        api_key=settings.zhipu_api_key,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        timeout=180,
-    )
+    client = create_zhipu_client()
+    settings = get_settings()
+
+    llm = llm_factory(settings.llm_model, client=client)
     logger.info(f"智谱 LLM 已初始化（{settings.llm_model}）")
     return llm
