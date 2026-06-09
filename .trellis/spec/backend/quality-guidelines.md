@@ -101,3 +101,15 @@ if os.environ.get("SKIP_RERANKER", "").lower() in ("1", "true", "yes"):
 **问题**：用 ChromaDB 里的原题做评估，所有检索策略命中率相同（HR@5=0.8929），没有区分度。
 **解决**：用不同措辞的改写题目（paraphrase），测试真正的语义检索能力。改写题目的 Hit Rate 应该用**关键词重叠 + 子串匹配**（不是 SequenceMatcher 文本相似度）。
 **结论**：混合检索（向量+BM25）在改写题目上比纯向量高 50%。
+
+### 11. 函数内 import 导致 NameError（asyncio 未导入）
+**问题**：`query.py` 中 `except asyncio.CancelledError` 捕获了 CancelledError，但 `import asyncio` 缺失（只在函数内 import，顶层没加）。用户中途取消流式请求时，Python 抛 `NameError: name 'asyncio' is not defined`，变成 500，部分答案丢失。
+**原因**：从其他文件复制代码时，函数内 import 被复制但顶层 import 遗漏。
+**解决**：所有 `import` 语句必须在模块顶层，不在函数内部。ESLint/ linter 会自动检查（Python 的 `pylint`/`ruff` 同理）。
+**预防**：`ruff check` 或 IDE 的 "unused import" 警告要认真看。
+
+### 12. 单例服务的实例属性竞争（_last_sources 并发覆盖）
+**问题**：`RAGService` 是模块级单例，`query_stream` 把检索结果存在 `self._last_sources`，多个并发请求互相覆盖，用户 A 看到用户 B 的来源引用。
+**解决**：用 `_StreamWithSources` wrapper class，把 sources 挂在生成器对象上（`gen.sources`），每个请求独立。
+**位置**：`services/rag_service.py` 的 `_StreamWithSources` 类 + `api/query.py` 的 `getattr(gen, "sources", [])`。
+**原则**：单例服务的任何方法里，不要把请求相关数据存到 `self.*` 属性上。

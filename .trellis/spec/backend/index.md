@@ -20,8 +20,9 @@
 |------|------|------|
 | [目录结构](./directory-structure.md) | 模块组织和文件布局 | ✅ 已完成 |
 | [数据库规范](./database-guidelines.md) | SQLite + ChromaDB 使用规范 | ✅ 已完成 |
+| [安全规范](./security-guidelines.md) | 路径遍历/CORS/SSRF/导入卫生/并发安全 | ✅ 已完成 |
 | [错误处理](./error-handling.md) | 异常类型、处理策略 | ✅ 已完成 |
-| [质量规范](./quality-guidelines.md) | 代码标准、禁止模式 | ✅ 已完成 |
+| [质量规范](./quality-guidelines.md) | 代码标准、禁止模式、踩坑记录 | ✅ 已完成 |
 | [日志规范](./logging-guidelines.md) | 结构化日志、日志级别 | ✅ 已完成 |
 
 ---
