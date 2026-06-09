@@ -3,6 +3,8 @@
 import { useState, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import rehypeHighlight from 'rehype-highlight'
+import 'highlight.js/styles/github-dark.css'
 import type { Message } from '@/lib/types'
 import { SourceCard } from '@/components/sources/SourceCard'
 
@@ -67,7 +69,10 @@ export function ChatMessage({ message, isStreaming, onRegenerate }: ChatMessageP
               <div className="text-sm leading-relaxed whitespace-pre-wrap">{message.content}</div>
             ) : (
               <div className="text-sm leading-relaxed markdown-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                >
                   {message.content}
                 </ReactMarkdown>
               </div>
