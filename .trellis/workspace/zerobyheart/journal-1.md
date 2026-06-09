@@ -244,3 +244,72 @@
 
 ### Status
 [OK] **Implementation + verification done**, ready for commit.
+
+---
+
+## Session: 2026-06-09 — eval-web-ui + markdown-streaming (父任务 06-09-eval-and-render)
+
+### Parent task
+- 06-09-eval-and-render — 评估报告 + 流式渲染下一迭代
+
+### Child A: 评估报告 Web 页 (06-09-eval-web-ui)
+- [OK] brainstorm: 数据访问=新后端 endpoint、页面模块=MVP、路由=/eval+Sidebar第3tab、详情=展开式SPA
+- [OK] 实施: backend/app/api/eval.py (summary + detail 两个endpoint)，frontend /eval 页面
+- [OK] 拆分 RagMetricsBar + ComparisonTable 子组件（page.tsx 从 313 行降到 151 行）
+- [OK] trellis-check: 1 issue (page 313>150行)，已修复；其他 5/5 必查项全过
+- [OK] 浏览器验证: /eval 页面正确显示 4 个 RAGAS 指标 + 3 策略对比表 + 4 条历史快照 + 展开交互
+- [OK] commit: `2deb76d` feat(eval): 评估报告 Web 页面 + 后端 /api/eval endpoints
+- [OK] archive: 06-09-eval-web-ui → archive/2026-06/
+
+### Child B: 流式 markdown 渲染 + 代码高亮 (06-09-markdown-streaming)
+- [OK] brainstorm: highlight.js + rehype-highlight，不做流式截断处理，github-dark.css 主题
+- [OK] 实施: 安装 highlight.js，ChatMessage.tsx 加 rehypePlugins + CSS import（3 处改动）
+- [OK] 浏览器验证: Python 快排代码块 .hljs-keyword 13个 + .hljs-string 2个
+- [OK] commit: `7b8cf81` feat(chat): 接入 highlight.js 代码块语法高亮
+- [OK] archive: 06-09-markdown-streaming → archive/2026-06/
+
+### Commits (this session)
+- `4b27086` refactor(chat): 统一 chat 状态到 ChatContext（上一 task）
+- `2381c78` chore(task): archive 06-09-unify-chat-state（上一 task）
+- `7b8cf81` feat(chat): 接入 highlight.js 代码块语法高亮
+- `2deb76d` feat(eval): 评估报告 Web 页面 + 后端 /api/eval endpoints
+- `chore(task): archive markdown-streaming` / `chore(task): archive eval-web-ui` / `chore(task): archive eval-and-render`
+
+
+## Session 6: 统一 chat 状态 + 高亮 + 评估页面 + ESLint + 安全修复 + Spec
+
+**Date**: 2026-06-09
+**Task**: 统一 chat 状态 + 高亮 + 评估页面 + ESLint + 安全修复 + Spec
+**Branch**: `master`
+
+### Summary
+
+6 个功能任务: ChatContext 统一状态消除多实例竞争; highlight.js 代码高亮; /eval 评估报告 Web 页面+后端 endpoint; ESLint 8 接入; P0/P1 安全漏洞修复(路径遍历/CORS/asyncio import/并发竞争); 后端安全规范 spec。项目健康度 6.5→8/10。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4b27086` | (see git log) |
+| `7b8cf81` | (see git log) |
+| `2deb76d` | (see git log) |
+| `371ee1a` | (see git log) |
+| `da6073b` | (see git log) |
+| `84dbc5a` | (see git log) |
+| `bb52c53` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
