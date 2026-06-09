@@ -166,3 +166,37 @@
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: 修复聊天/知识库 3 个 bug
+
+**Date**: 2026-06-09
+**Task**: 修复聊天/知识库 3 个 bug
+**Branch**: `master`
+
+### Summary
+
+修复 3 个 bug：(1) SSE 流式 400 移除 response_model 避免 Pydantic 校验冲突；(2) 切走对话答案变三点 — 后端 CancelledError 捕获+前端 useRef 保存 partial；(3) 导入无效 — IngestModal onComplete 从渲染体改 useEffect+hasCompleted flag。验证：30 单测通过 + tsc + build OK。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `4edebe8` | (see git log) |
+| `18eb1eb` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
