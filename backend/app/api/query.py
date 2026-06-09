@@ -28,9 +28,14 @@ def _get_rag_service() -> RAGService:
     return _rag_service
 
 
-@router.post("/query", response_model=QueryResponse)
+@router.post("/query")
 async def query_endpoint(request: QueryRequest):
-    """问答接口，支持普通返回和 SSE 流式返回"""
+    """问答接口，支持普通返回和 SSE 流式返回
+
+    修复：移除 response_model，因为 SSE 响应（text/event-stream）
+    和 Pydantic JSON 模型不兼容，FastAPI 会强制校验 SSE 响应，
+    导致 'There was an error parsing the body' 错误。
+    """
 
     # 获取或创建对话 ID
     conversation_id = request.conversation_id or str(uuid.uuid4())
@@ -72,10 +77,15 @@ async def query_endpoint(request: QueryRequest):
 
 
 async def stream_generator(rag_service, question, history, conversation_id):
-    """SSE 流式生成器"""
-    try:
-        full_answer = ""
+    """SSE 流式生成器
 
+    修复 1：SSE 响应不带 response_model，移除 FastAPI 强校验。
+    修复 2：用户切走时浏览器 abort 会触发 CancelledError，
+            此时已生成的部分答案（partial answer）必须保存到
+            conversations[] 字典，否则切回来就是空。
+    """
+    full_answer = ""
+    try:
         async for chunk in rag_service.query_stream(
             question=question,
             chat_history=history,
@@ -98,11 +108,26 @@ async def stream_generator(rag_service, question, history, conversation_id):
         # 发送完成信号（附带来源引用）
         yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_id, 'sources': source_refs}, ensure_ascii=False)}\n\n"
 
-        # 更新对话历史
+        # 正常完成：把完整问答存入 history
         history.append({"role": "user", "content": question})
         history.append({"role": "assistant", "content": full_answer})
         conversations[conversation_id] = history[-20:]
 
+    except asyncio.CancelledError:
+        # 前端主动关闭（用户切走/取消浏览器）
+        # 重要：已生成的部分必须保存到 history
+        if full_answer:
+            history.append({"role": "user", "content": question})
+            history.append({"role": "assistant", "content": full_answer + "…"})
+            conversations[conversation_id] = history[-20:]
+            logger.info(
+                f"流式被前端取消，已保存 partial answer ({len(full_answer)} chars) "
+                f"to conversation {conversation_id}"
+            )
+        # 不 raise：避免触发 FastAPI 500
     except Exception as e:
         logger.error(f"流式生成异常: {e}", exc_info=True)
-        yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        try:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        except Exception:
+            pass

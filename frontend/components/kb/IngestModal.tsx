@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 
 import { ImportProgress } from '@/components/kb/ImportProgress'
 import { useIngestTask } from '@/hooks/useIngestTask'
@@ -27,6 +27,8 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
   const [path, setPath] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  // 防止 onComplete 重复触发（status 从其他变成 done 时只触发一次）
+  const [hasCompleted, setHasCompleted] = useState(false)
   const ingest = useIngestTask()
 
   const reset = useCallback(() => {
@@ -35,6 +37,7 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
     setPath('')
     setSubmitting(false)
     setSubmitError(null)
+    setHasCompleted(false)
     ingest.stop()
   }, [ingest])
 
@@ -75,6 +78,7 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
         const r = await submitIngestTask(path.trim(), sourceType)
         taskId = r.task_id
       }
+      setHasCompleted(false)  // 重新开始任务时重置
       ingest.start(taskId)
     } catch (e) {
       setSubmitError(e instanceof Error ? e.message : '提交失败')
@@ -83,10 +87,14 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
     }
   }, [tab, file, url, path, ingest])
 
-  // 任务完成 → 通知父组件刷新
-  if (ingest.isTerminal && ingest.task?.status === 'done') {
-    onComplete()
-  }
+  // 任务完成（status=done）时只触发一次 onComplete
+  // 用 useEffect 避免在渲染函数体里调用造成无限循环
+  useEffect(() => {
+    if (ingest.isTerminal && ingest.task?.status === 'done' && !hasCompleted) {
+      setHasCompleted(true)
+      onComplete()
+    }
+  }, [ingest.isTerminal, ingest.task?.status, hasCompleted, onComplete])
 
   if (!isOpen) return null
 
@@ -159,7 +167,7 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
             <div>
               <input
                 type="text"
-                placeholder="data/questions.md（仅允许 data/ 目录下相对路径）"
+                placeholder="raw/Extra01-参考答案.md（仅允许 data/raw/ 目录下文件）"
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
                 className="w-full px-3 py-2 text-sm rounded-lg outline-none font-mono"

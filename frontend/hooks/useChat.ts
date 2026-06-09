@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { queryStream } from '@/lib/api'
 import type { Message, SourceRef } from '@/lib/types'
 
@@ -12,6 +12,25 @@ interface UseChatOptions {
 export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
   const [isLoading, setIsLoading] = useState(false)
   const streamingConvIdRef = useRef<string | null>(null)
+  // 用 ref 保存流式 partial content，组件 unmount/路由切换也不丢
+  const partialRef = useRef<{ convId: string; aiMsgId: string; content: string; sources: SourceRef[] } | null>(null)
+
+  // 组件 unmount 时把 partial content 写回 store
+  useEffect(() => {
+    return () => {
+      const p = partialRef.current
+      if (p && p.content) {
+        const msgs = getMessages(p.convId)
+        onMessageUpdate(
+          p.convId,
+          msgs.map((m) =>
+            m.id === p.aiMsgId ? { ...m, content: p.content + '…' } : m,
+          ),
+        )
+        partialRef.current = null
+      }
+    }
+  }, [onMessageUpdate, getMessages])
 
   const sendMessage = useCallback(async (content: string, conversationId: string) => {
     if (!content.trim() || isLoading) return
@@ -39,6 +58,9 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
 
     onMessageUpdate(conversationId, [...currentMessages, userMessage, aiMessage])
 
+    // 初始化 partial 状态
+    partialRef.current = { convId: conversationId, aiMsgId: aiMessageId, content: '', sources: [] }
+
     try {
       // 构建对话历史（排除最后的 AI 占位消息）
       const historyForApi = currentMessages
@@ -49,24 +71,37 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
       let sources: SourceRef[] = []
       let backendConvId: string | undefined = undefined
 
-      for await (const event of queryStream(content, backendConvId, historyForApi)) {
-        if (event.error) throw new Error(event.error)
+      try {
+        for await (const event of queryStream(content, backendConvId, historyForApi)) {
+          if (event.error) throw new Error(event.error)
 
-        if (event.content) {
-          fullContent += event.content
-          const latest = getMessages(conversationId)
-          onMessageUpdate(
-            conversationId,
-            latest.map((m) =>
-              m.id === aiMessageId ? { ...m, content: fullContent } : m,
-            ),
-          )
-        }
+          if (event.content) {
+            fullContent += event.content
+            if (partialRef.current) {
+              partialRef.current.content = fullContent
+            }
+            const latest = getMessages(conversationId)
+            onMessageUpdate(
+              conversationId,
+              latest.map((m) =>
+                m.id === aiMessageId ? { ...m, content: fullContent } : m,
+              ),
+            )
+          }
 
-        if (event.done) {
-          if (event.conversation_id) backendConvId = event.conversation_id
-          if (event.sources) sources = event.sources
+          if (event.done) {
+            if (event.conversation_id) backendConvId = event.conversation_id
+            if (event.sources) {
+              sources = event.sources
+              if (partialRef.current) {
+                partialRef.current.sources = sources
+              }
+            }
+          }
         }
+      } catch (innerErr) {
+        // 流被中断（CancelledError 或网络错误），partial 已被 ref 保存
+        throw innerErr
       }
 
       const final = getMessages(conversationId)
@@ -76,15 +111,22 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
           m.id === aiMessageId ? { ...m, content: fullContent, sources } : m,
         ),
       )
+      partialRef.current = null
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : '请求失败'
+      // 流被中断时 err 是空或 CancelledError，partial 已被 useEffect cleanup 写回
       const latest = getMessages(conversationId)
-      onMessageUpdate(
-        conversationId,
-        latest.map((m) =>
-          m.id === aiMessageId ? { ...m, content: `抱歉，出现了错误：${errorMsg}` } : m,
-        ),
-      )
+      const partial = partialRef.current?.content || ''
+      if (partial) {
+        // 已经有部分内容被 useEffect cleanup 写过，这里不再覆盖
+        partialRef.current = null
+      } else {
+        onMessageUpdate(
+          conversationId,
+          latest.map((m) =>
+            m.id === aiMessageId ? { ...m, content: `抱歉，出现了错误：${err instanceof Error ? err.message : '请求失败'}` } : m,
+          ),
+        )
+      }
     } finally {
       setIsLoading(false)
       streamingConvIdRef.current = null
