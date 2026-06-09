@@ -1,6 +1,7 @@
 """评估报告接口"""
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -8,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 router = APIRouter(prefix="/api/eval", tags=["eval"])
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "evaluation" / "results"
+_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$")
 
 
 def _normalize_history_item(data: dict, filename: str) -> dict:
@@ -64,6 +66,8 @@ async def eval_summary():
 async def eval_detail(ts: str | None = None):
     """返回完整评估结果（latest 或指定历史快照）"""
     if ts:
+        if not _TS_RE.match(ts):
+            raise HTTPException(status_code=400, detail="ts 参数格式无效")
         file_path = RESULTS_DIR / "history" / f"{ts}.json"
     else:
         file_path = RESULTS_DIR / "latest.json"

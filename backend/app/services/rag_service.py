@@ -15,6 +15,18 @@ from app.services.embed_service import EmbedService
 
 logger = logging.getLogger(__name__)
 
+
+class _StreamWithSources:
+    """包装 async generator，附加 sources 属性供调用方读取。"""
+
+    def __init__(self, gen: AsyncGenerator[str, None], sources: list[dict]):
+        self._gen = gen
+        self.sources = sources
+
+    async def __aiter__(self):
+        async for chunk in self._gen:
+            yield chunk
+
 # 系统提示
 SYSTEM_PROMPT = """你是一个专业的面试助手。你的任务是根据提供的参考资料回答用户的面试问题。
 
@@ -97,13 +109,15 @@ class RAGService:
         question: str,
         chat_history: list[dict] | None = None,
     ) -> AsyncGenerator[str, None]:
-        """问答（流式返回，同时检索前置）"""
+        """问答（流式返回，同时检索前置）
+
+        返回 _StreamWithSources 对象，迭代时 yield chunk，sources 属性存检索结果。
+        调用方在 async for 消费完后可读 gen.sources 获取来源引用，无实例属性竞争。
+        """
         import asyncio
 
-        # 直接使用原始问题，跳过查询改写（改写需要额外 LLM 调用，太慢）
         rewritten = question
 
-        # 2-3. 混合检索 + Re-ranking（同步操作，在线程池中运行）
         loop = asyncio.get_event_loop()
 
         def _retrieve_and_rerank():
@@ -121,17 +135,16 @@ class RAGService:
             return sources
 
         sources = await loop.run_in_executor(None, _retrieve_and_rerank)
-        self._last_sources = sources[: self.settings.rerank_top_k]
+        top_sources = sources[: self.settings.rerank_top_k]
 
-        # 4. 构建上下文
-        context = self._build_context(self._last_sources)
-
-        # 5. 构建消息
+        context = self._build_context(top_sources)
         messages = self._build_messages(question, context, chat_history)
 
-        # 6. 流式生成
-        async for chunk in self.llm_service.chat_stream(messages):
-            yield chunk
+        async def _stream():
+            async for chunk in self.llm_service.chat_stream(messages):
+                yield chunk
+
+        return _StreamWithSources(_stream(), top_sources)
 
     async def _rewrite_query(self, question: str) -> str:
         """用 LLM 改写查询（在线程池中运行避免阻塞事件循环）"""

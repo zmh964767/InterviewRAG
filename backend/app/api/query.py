@@ -1,5 +1,6 @@
 """问答接口"""
 
+import asyncio
 import json
 import logging
 import uuid
@@ -86,15 +87,16 @@ async def stream_generator(rag_service, question, history, conversation_id):
     """
     full_answer = ""
     try:
-        async for chunk in rag_service.query_stream(
+        gen = rag_service.query_stream(
             question=question,
             chat_history=history,
-        ):
+        )
+        async for chunk in gen:
             full_answer += chunk
             yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
 
-        # 获取来源引用（在 query_stream 中已计算并缓存在 _last_sources）
-        sources = getattr(rag_service, "_last_sources", [])
+        # 获取来源引用（从生成器对象读取，避免实例属性竞争）
+        sources = getattr(gen, "sources", [])
         source_refs = [
             {
                 "question_id": s["id"],
