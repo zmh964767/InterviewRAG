@@ -16,7 +16,7 @@ interface SidebarProps {
   onDeleteConversation: (id: string) => void
 }
 
-type Tab = 'conversations' | 'knowledge'
+type Tab = 'conversations' | 'knowledge' | 'eval'
 
 export function Sidebar({
   isOpen, onToggle, stats,
@@ -25,14 +25,16 @@ export function Sidebar({
 }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  // /kb 路由对应知识库 Tab，其他路径对应对话 Tab
-  const activeTab: Tab = pathname?.startsWith('/kb') ? 'knowledge' : 'conversations'
+  // 根据 pathname 判断当前 Tab
+  const activeTab: Tab = pathname?.startsWith('/kb') ? 'knowledge' : pathname?.startsWith('/eval') ? 'eval' : 'conversations'
 
   const handleTabClick = (tab: Tab) => {
     if (tab === 'conversations') {
       router.push('/')
-    } else {
+    } else if (tab === 'knowledge') {
       router.push('/kb')
+    } else if (tab === 'eval') {
+      router.push('/eval')
     }
   }
 
@@ -71,25 +73,27 @@ export function Sidebar({
           </button>
         </div>
 
-        {/* New Chat */}
-        <div className="p-4">
-          <button
-            onClick={onCreateConversation}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all"
-            style={{ background: 'var(--ink)', color: 'var(--cream)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85' }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-            </svg>
-            新建对话
-          </button>
-        </div>
+        {/* New Chat — 仅对话 tab */}
+        {activeTab === 'conversations' && (
+          <div className="p-4">
+            <button
+              onClick={onCreateConversation}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all"
+              style={{ background: 'var(--ink)', color: 'var(--cream)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85' }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+              新建对话
+            </button>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="px-4 flex gap-1 mb-2">
-          {(['conversations', 'knowledge'] as Tab[]).map((tab) => (
+          {(['conversations', 'knowledge', 'eval'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => handleTabClick(tab)}
@@ -100,13 +104,20 @@ export function Sidebar({
                 border: activeTab === tab ? '1px solid var(--border-subtle)' : '1px solid transparent',
               }}
             >
-              {tab === 'conversations' ? '对话' : '知识库'}
+              {tab === 'conversations' ? '对话' : tab === 'knowledge' ? '知识库' : '评估'}
             </button>
           ))}
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'conversations' ? (
+        {activeTab === 'eval' ? (
+          /* Eval Tab — 无 Sidebar 内容，页面自身 fetch 数据 */
+          <div className="flex-1 overflow-y-auto px-4">
+            <div className="text-center py-8">
+              <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>评估数据在右侧页面展示</p>
+            </div>
+          </div>
+        ) : activeTab === 'conversations' ? (
           /* Conversation List */
           <div className="flex-1 overflow-y-auto px-3">
             {conversations.length === 0 ? (

@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.core.exceptions import AppError
 from app.api import query, ingest, health, stats, questions
+from app.api import eval as eval_router
 
 # 日志配置
 logging.basicConfig(
@@ -54,6 +55,7 @@ app.include_router(ingest.router, prefix="/api", tags=["ingest"])
 app.include_router(questions.router, prefix="/api", tags=["questions"])
 app.include_router(health.router, prefix="/api", tags=["health"])
 app.include_router(stats.router, prefix="/api", tags=["stats"])
+app.include_router(eval_router.router)
 
 
 @app.exception_handler(AppError)

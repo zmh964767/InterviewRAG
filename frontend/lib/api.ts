@@ -16,6 +16,8 @@ import type {
   TaskStatusResponse,
   TaskListResponse,
   IngestTaskAccepted,
+  EvalSummaryResponse,
+  EvalDetailResponse,
 } from './types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
@@ -219,5 +221,26 @@ export async function uploadIngestFile(file: File): Promise<IngestTaskAccepted> 
     const error = await res.json().catch(() => ({ detail: '上传失败' }))
     throw new Error(error.detail || `HTTP ${res.status}`)
   }
+  return res.json()
+}
+
+// =========================================================================
+// 评估报告
+// =========================================================================
+
+/** 评估汇总（latest + history） */
+export async function getEvalSummary(): Promise<EvalSummaryResponse> {
+  const res = await fetch(`${API_BASE}/api/eval/summary`)
+  if (!res.ok) throw new Error('Failed to fetch eval summary')
+  return res.json()
+}
+
+/** 评估详情（latest 或指定历史快照） */
+export async function getEvalDetail(ts?: string): Promise<EvalDetailResponse> {
+  const url = ts
+    ? `${API_BASE}/api/eval/detail?ts=${encodeURIComponent(ts)}`
+    : `${API_BASE}/api/eval/detail`
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('Failed to fetch eval detail')
   return res.json()
 }

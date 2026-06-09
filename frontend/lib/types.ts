@@ -134,3 +134,43 @@ export interface TaskListResponse {
 export interface IngestTaskAccepted {
   task_id: string
 }
+
+// =========================================================================
+// 评估报告
+// =========================================================================
+
+/** 评估 RAGAS 指标 */
+export interface EvalMetrics {
+  faithfulness: number
+  answer_relevancy: number
+  context_precision: number
+  context_recall: number
+}
+
+/** 评估汇总条目（latest_summary 或 history 快照） */
+export interface EvalSummaryItem {
+  metrics: EvalMetrics
+  timestamp: string
+  total: number
+  error_count: number
+}
+
+/** /api/eval/summary 响应 */
+export interface EvalSummaryResponse {
+  latest: EvalSummaryItem | null
+  history: EvalSummaryItem[]
+}
+
+/** 检索策略对比（单个策略） */
+export interface EvalComparisonPlan {
+  'hit_rate@5': number
+  mrr: number
+}
+
+/** /api/eval/detail 响应 */
+export interface EvalDetailResponse {
+  aggregated: EvalMetrics
+  errors: string[]
+  total: number
+  comparison: Record<string, EvalComparisonPlan>
+}
