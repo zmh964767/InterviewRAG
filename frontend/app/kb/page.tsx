@@ -11,9 +11,8 @@ import { QuestionTable } from '@/components/kb/QuestionTable'
 import { UndoToast } from '@/components/kb/UndoToast'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { useKnowledgeBase } from '@/hooks/useKnowledgeBase'
-import { useConversations } from '@/hooks/useConversations'
 import { deleteQuestion, getStats } from '@/lib/api'
-import type { Message, Question, StatsResponse } from '@/lib/types'
+import type { Question, StatsResponse } from '@/lib/types'
 
 export default function KbPage() {
   const kb = useKnowledgeBase()
@@ -32,18 +31,6 @@ export default function KbPage() {
   useEffect(() => {
     getStats().then(setStats).catch(() => {})
   }, [])
-
-  // Sidebar 需要的对话相关 props（kb 页面没有对话，给空）
-  const {
-    conversations, currentId,
-    createConversation, switchConversation, deleteConversation,
-  } = useConversations()
-  void createConversation
-  void switchConversation
-  void deleteConversation
-  void currentId
-  void conversations
-  void (null as Message[] | null)
 
   const handleSelect = useCallback((q: Question) => {
     setSelected(q)

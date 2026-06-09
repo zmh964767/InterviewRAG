@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { Sidebar } from '@/components/layout/Sidebar'
-import { useChat } from '@/hooks/useChat'
+import { useChatContext } from '@/contexts/ChatContext'
 import { useConversations } from '@/hooks/useConversations'
 import { getStats } from '@/lib/api'
 import type { StatsResponse, Message } from '@/lib/types'
@@ -23,61 +23,113 @@ export default function Home() {
     createConversation, switchConversation, deleteConversation, updateMessages,
   } = useConversations()
 
-  // 消息更新回调：写入 Map 并同步显示
-  const handleMessageUpdate = useCallback((convId: string, msgs: Message[]) => {
-    messagesMapRef.current[convId] = msgs
-    if (convId === currentIdRef.current) {
-      setDisplayMessages(msgs)
-    }
-  }, [])
+  // 从 ChatContext 获取流式状态（跨路由存活）
+  const { isLoading, sendMessage, subscribe, getPartial } = useChatContext()
 
-  // 获取指定对话的消息
-  const getMessages = useCallback((convId: string) => {
-    return messagesMapRef.current[convId] || []
-  }, [])
+  // 订阅流式 partial 变化（layout 里的 ChatProvider 会通知）
+  useEffect(() => {
+    const unsubscribe = subscribe((partial) => {
+      if (!partial) return
+      // 流式进行中，把 partial 写入 messagesMapRef
+      const msgs = messagesMapRef.current[partial.convId] || []
+      const existing = msgs.find((m) => m.id === partial.aiMsgId)
+      let next: Message[]
+      if (existing) {
+        next = msgs.map((m) =>
+          m.id === partial.aiMsgId
+            ? { ...m, content: partial.content, sources: partial.sources }
+            : m,
+        )
+      } else {
+        next = [
+          ...msgs,
+          {
+            id: partial.aiMsgId,
+            role: 'assistant' as const,
+            content: partial.content,
+            sources: partial.sources,
+            timestamp: Date.now(),
+          },
+        ]
+      }
+      messagesMapRef.current[partial.convId] = next
+      if (partial.convId === currentIdRef.current) {
+        setDisplayMessages(next)
+      }
+    })
+    return unsubscribe
+  }, [subscribe])
 
-  const { sendMessage: rawSendMessage, isLoading } = useChat({
-    onMessageUpdate: handleMessageUpdate,
-    getMessages,
-  })
-
-  const currentIdRef = useRef<string | null>(null)
-  currentIdRef.current = currentId
-
-  // 从 localStorage 恢复消息到 Map
+  // 初始化时从 localStorage 恢复消息
   useEffect(() => {
     for (const conv of conversations) {
       if (!messagesMapRef.current[conv.id] && conv.messages.length > 0) {
         messagesMapRef.current[conv.id] = conv.messages
       }
     }
-    // 显示当前对话的消息
     if (currentId) {
       setDisplayMessages(messagesMapRef.current[currentId] || [])
     }
   }, [conversations, currentId])
 
-  // 防抖持久化到 localStorage
+  // 卸载时立即持久化
+  useEffect(() => {
+    return () => {
+      if (currentIdRef.current && messagesMapRef.current[currentIdRef.current]) {
+        updateMessages(messagesMapRef.current[currentIdRef.current])
+      }
+    }
+  }, [updateMessages])
+
+  // 每个 chunk 立即持久化（去 debounce）
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!currentId || displayMessages.length === 0) return
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      updateMessages(displayMessages)
-    }, 500)
-    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current) }
-  }, [displayMessages, currentId]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (currentIdRef.current && displayMessages.length > 0) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = setTimeout(() => {
+        const latest = messagesMapRef.current[currentIdRef.current!]
+        if (latest) updateMessages(latest)
+      }, 100)
+    }
+  }, [displayMessages, updateMessages])
+
+  const currentIdRef = useRef<string | null>(null)
+  currentIdRef.current = currentId
 
   // 发送消息
-  const sendMessage = useCallback((content: string) => {
+  const handleSend = useCallback((content: string) => {
     let convId = currentId
     if (!convId || conversations.length === 0) {
       convId = createConversation()
     }
     if (convId) {
-      rawSendMessage(content, convId)
+      // 把 user message 立即写入 messagesMapRef
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        role: 'user',
+        content,
+        timestamp: Date.now(),
+      }
+      const aiMsgId = (Date.now() + 1).toString()
+      const newMessages: Message[] = [
+        ...(messagesMapRef.current[convId] || []),
+        userMessage,
+        {
+          id: aiMsgId,
+          role: 'assistant',
+          content: '',
+          sources: [],
+          timestamp: Date.now(),
+        },
+      ]
+      messagesMapRef.current[convId] = newMessages
+      if (convId === currentIdRef.current) {
+        setDisplayMessages(newMessages)
+      }
+      updateMessages(newMessages)
+      sendMessage(content, convId)
     }
-  }, [currentId, conversations.length, createConversation, rawSendMessage])
+  }, [currentId, conversations.length, createConversation, sendMessage, updateMessages])
 
   // 新建对话
   const handleNewChat = useCallback(() => {
@@ -86,22 +138,21 @@ export default function Home() {
 
   // 切换对话
   const handleSwitchConversation = useCallback((id: string) => {
-    // 保存当前对话
-    if (currentId && displayMessages.length > 0) {
-      updateMessages(displayMessages)
+    if (currentId && messagesMapRef.current[currentId]?.length > 0) {
+      updateMessages(messagesMapRef.current[currentId])
     }
     switchConversation(id)
     setDisplayMessages(messagesMapRef.current[id] || [])
-  }, [currentId, displayMessages, switchConversation, updateMessages])
+  }, [currentId, switchConversation, updateMessages])
 
   // 重新生成
   const handleRegenerate = useCallback(() => {
     if (displayMessages.length < 2 || !currentId) return
     const lastUserMsg = [...displayMessages].reverse().find((m) => m.role === 'user')
     if (lastUserMsg) {
-      rawSendMessage(lastUserMsg.content, currentId)
+      handleSend(lastUserMsg.content)
     }
-  }, [displayMessages, currentId, rawSendMessage])
+  }, [displayMessages, currentId, handleSend])
 
   // 删除对话
   const handleDeleteConversation = useCallback((id: string) => {
@@ -160,11 +211,11 @@ export default function Home() {
         <ChatHistory
           messages={displayMessages}
           isLoading={isLoading}
-          onSend={sendMessage}
+          onSend={handleSend}
           onRegenerate={handleRegenerate}
         />
 
-        <ChatInput onSend={sendMessage} isLoading={isLoading} />
+        <ChatInput onSend={handleSend} isLoading={isLoading} />
       </div>
 
       {deleteConfirmId && (
