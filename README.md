@@ -9,8 +9,11 @@
 - **多数据源采集**：MD 解析 + 网页爬虫 + PDF 解析
 - **多轮对话**：支持上下文记忆的连续追问
 - **流式输出**：SSE 实时返回答案，首字延迟 < 1s
+- **代码语法高亮**：highlight.js + github-dark 主题，Python/JS/JSON 等 190+ 种语言
 - **RAGAS 评估**：Faithfulness、Relevancy、Precision、Recall 四项指标
+- **评估报告 Web UI**：`/eval` 页面展示最新指标 + 历史快照（无需终端 `cat report.md`）
 - **对比实验**：四种检索策略效果对比
+- **代码质量**：ESLint 8 + Next.js TypeScript 规则，0 warnings
 
 ## 🏗️ 技术栈
 
@@ -24,7 +27,10 @@
 | Re-ranking | BGE-Reranker |
 | 后端 | FastAPI (Python) |
 | 前端 | Next.js (React + Tailwind) |
+| 代码高亮 | highlight.js + rehype-highlight |
 | 评估 | RAGAS |
+| 测试 | Vitest + React Testing Library |
+| 代码质量 | ESLint 8 (next/core-web-vitals + next/typescript) |
 
 ## 📁 项目结构
 
@@ -32,7 +38,7 @@
 InterviewRAG/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # API 路由
+│   │   ├── api/          # API 路由（query/ingest/eval/questions/health/stats）
 │   │   ├── chains/       # LangChain 链
 │   │   ├── retrievers/   # 检索器（混合、小块大块）
 │   │   ├── rerankers/    # Re-ranking
@@ -40,13 +46,19 @@ InterviewRAG/
 │   │   ├── models/       # 数据模型
 │   │   ├── services/     # 业务逻辑
 │   │   └── core/         # 核心工具
-│   ├── evaluation/       # 评估模块
+│   ├── evaluation/       # 评估模块（结果在 results/ 下）
 │   └── data/             # 数据存储
 ├── frontend/
-│   ├── app/              # Next.js 页面
+│   ├── app/              # Next.js 页面（/ /kb /eval）
 │   ├── components/       # React 组件
-│   ├── lib/              # API 封装
-│   └── hooks/            # 自定义 Hooks
+│   │   ├── chat/         # 对话组件（ChatMessage / ChatHistory / ChatInput）
+│   │   ├── eval/         # 评估组件（RagMetricsBar / ComparisonTable）
+│   │   ├── kb/           # 知识库组件
+│   │   ├── layout/       # Sidebar 等布局组件
+│   │   └── sources/      # 来源引用组件
+│   ├── contexts/         # React Context（ChatContext）
+│   ├── hooks/            # 自定义 Hooks（useConversations adapter）
+│   └── lib/              # API 封装 + 类型定义
 └── README.md
 ```
 
@@ -84,6 +96,10 @@ npm run dev
 
 ### 4. 评估系统
 
+**Web UI**（推荐）：访问 `http://localhost:3000/eval`，查看最新指标 + 历史快照列表，点击展开详情。
+
+**命令行**（运行新评估）：
+
 ```bash
 cd backend
 
@@ -107,6 +123,14 @@ cat evaluation/report.md
 - `SKIP_RERANKER=1`：跳过 BGE Re-ranker（Windows 必需）
 - `ZHIPU_API_KEY`：智谱 API 密钥（.env 文件配置）
 
+### 5. 测试
+
+```bash
+cd frontend
+npm test          # 20 个 ChatContext 单测（CRUD + 持久化 + 流式 partial 同步）
+npm run lint      # ESLint 检查（0 warnings / errors）
+```
+
 ## 📊 检索策略对比
 
 | 方案 | 检索策略 | Re-ranking |
@@ -126,6 +150,8 @@ cat evaluation/report.md
 - `POST /api/ingest/upload` — 上传文件导入
 - `POST /api/ingest/insert-one` — 单条插入（撤销用）
 - `DELETE /api/questions/{id}` — 删除单条
+- `GET /api/eval/summary` — 评估汇总（最新 + 历史快照列表）
+- `GET /api/eval/detail?ts=<ISO>` — 评估详情（latest 或指定历史快照）
 - `GET /api/health` — 健康检查
 - `GET /api/stats` — 知识库统计
 
