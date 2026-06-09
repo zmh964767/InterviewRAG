@@ -1,0 +1,29 @@
+{
+  "id": "eval-and-render",
+  "name": "eval-and-render",
+  "title": "评估报告 + 流式渲染下一迭代",
+  "description": "",
+  "status": "completed",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P2",
+  "creator": "zerobyheart",
+  "assignee": "zerobyheart",
+  "createdAt": "2026-06-09",
+  "completedAt": "2026-06-09",
+  "branch": null,
+  "base_branch": "master",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "06-09-eval-web-ui",
+    "06-09-markdown-streaming"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}
