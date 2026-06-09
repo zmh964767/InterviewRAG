@@ -200,3 +200,47 @@
 ### Next Steps
 
 - None - task complete
+
+---
+
+## Session: 2026-06-09 — unify-chat-state (P2)
+
+### Goal
+把 useConversations 状态合并进 ChatContext，消除多实例 + localStorage 竞争；useConversations 保留为 adapter。
+
+### Planning
+- [OK] prd.md / design.md / implement.md 写完（complex 任务三件套齐全）
+- [OK] implement.jsonl + check.jsonl curate 完，validate 通过
+  - 4 implement entries (state-management / type-safety / quality / hook)
+  - 2 check entries (quality / state-management)
+- [OK] 用户确认计划 + 选 sub-agent 派发模式
+- [OK] task.py start → status=in_progress
+
+### Key Facts
+- Sidebar.tsx 用 `import type { Conversation }` → 改 adapter 后 type-only 兼容
+- 项目无 jest/vitest 配置（package.json 无 test script）→ 测试代码可写但不一定能跑，需 sub-agent 评估
+- ChatProvider 当前的 `subscribe` 仍会触发外部订阅（page.tsx 用过），合并后保留
+
+### Implementation
+- (in progress) Dispatching trellis-implement sub-agent
+
+### Implementation
+- [OK] Steps 1-5 (trellis-implement): ChatContext 合并 / useConversations adapter / 删 ConversationsBootstrap / page.tsx 简化
+  - tsc 0 错误, build 成功 (5/5 pages)
+  - 加 `hasHydratedRef` 防止初始空 state 覆盖 localStorage (超出 design.md 的 safety net,合理)
+- [OK] trellis-check 独立验收: 5/5 必查项 + spec 合规全过
+  - 唯一 PRD gap = 单测缺失 (Step 6)
+- [OK] Step 6 单测 (trellis-implement): 选 vitest (无 jest 配置,装 vitest 4.1.8 + RTL + jsdom)
+  - 20 tests / 4 describe 全绿 (1.32s)
+  - 覆盖 implement.md §4 全部 P1 场景 + adapter 兼容性
+  - tsc + build 重跑仍 0 错
+- [OK] 端到端浏览器手测 (playwright MCP): 8 项验证全过
+  - hydration guard / 新建 / 切路由 / 刷新恢复 / 单实例 / 多对话 / 切换 / 删除
+  - console 仅 favicon 404 + 后端连接拒绝 (无关)
+
+### Spec Updates
+- [OK] `.trellis/spec/frontend/state-management.md` — 新增 "Context 持久化的反模式 → 修正模式" 章节 (含 hydration guard + adapter 模式)
+- [OK] `.trellis/spec/frontend/quality-guidelines.md` — 测试框架章节从 Jest 迁到 Vitest 4 (含 oxc JSX 注意)
+
+### Status
+[OK] **Implementation + verification done**, ready for commit.
