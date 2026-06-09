@@ -1,7 +1,6 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { useState } from 'react'
 import type { StatsResponse } from '@/lib/types'
 import type { Conversation } from '@/hooks/useConversations'
 
