@@ -370,3 +370,44 @@
 ### Next Steps
 
 - 下次会话:开 `06-10-ci-coverage` 父任务,优先做 CI workflow
+
+## Session 8: CI 接入完成 (2026-06-10 晚)
+
+**Task**: 06-10-ci-coverage 质量门禁
+**Branch**: `master`
+
+### 完成内容
+
+1. **CI Workflow**: `.github/workflows/ci.yml` — push/PR 到 master 触发
+   - 后端 pytest (98 tests) + coverage (52%)
+   - 前端 vitest (20 tests) + ESLint (0 warnings) + build
+   - 前端 coverage (60% statements)
+   - 三 job 并行,3 分钟完成
+2. **测试修复**:
+   - `test_api.py`: test_query_with_history 断言修复(mock list 引用问题)
+   - `test_questions_api.py`: 新增 `_isolate_db` autouse fixture(临时 SQLite 隔离)
+   - `questions.py`: ChromaDB 异常改为 HTTPException(500)
+3. **依赖补全**:
+   - `requirements.txt`: 加 `pytest-cov==6.1.1`
+   - `package.json`: 加 `@vitest/coverage-v8`
+4. **CI 环境配置**:
+   - `conftest.py`: `ZHIPU_API_KEY=test-key` 防止 CI 502 崩溃
+5. **Branch Protection**: GitHub 设置完成
+   - master 分支必须通过 CI 才能合并 PR
+   - 三个 status check 必须全部绿灯
+
+### CI 调试经验
+
+- `pytest-cov` 和 `@vitest/coverage-v8` 是 coverage 必需依赖,不显式装会报 `unrecognized arguments`/`MISSING DEPENDENCY`
+- CI 没有 `.env` 文件,RAGService 初始化需要 API key,用 `os.environ.setdefault` 提供后备
+- `--cov=app` 需要设置 `PYTHONPATH=.` 让 pytest 正确 import
+
+### Git 学习
+
+- 学会了 SSH key 配置(push 到 GitHub)
+- GitHub 443 端口绕过 GFW(SshConfig 设 `HostName ssh.github.com`)
+
+### Next Steps
+
+- 独立任务: `06-10-backend-tests` — 补 path_guard / query SSE / ingest 高风险模块测试
+- 或: RAG 调参 — 用评估体系做检索参数扫描
