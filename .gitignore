@@ -21,6 +21,7 @@ backend/data/processed/
 node_modules/
 .next/
 out/
+*.tsbuildinfo
 
 # IDE
 .vscode/
@@ -43,3 +44,13 @@ Thumbs.db
 .trellis/tasks/*/research/
 .trellis/tasks/*/implement.jsonl
 .trellis/tasks/*/check.jsonl
+# Trellis template state (local)
+.trellis/.template-hashes.json
+.trellis/.version
+
+# CodeGraph runtime (local)
+.codegraph/daemon.pid
+
+# Agent runtime (local tooling, not project source)
+.codex/
+.agents/
