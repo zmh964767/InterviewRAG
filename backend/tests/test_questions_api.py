@@ -7,47 +7,14 @@
 """
 
 import pytest
-import tempfile
 
-from app.models.database import Database
-from app.services.task_store import store as task_store
-from app.services import ingest_service as ingest_service_module
 import app.core.db as db_module
 
 
 # =========================================================================
-# Fixtures：mock 掉 ChromaDB / Embedding / SQLite，避免真实网络和数据库调用
-# =========================================================================
-
-
-@pytest.fixture(autouse=True)
-def _isolate_db(tmp_path):
-    """每个测试用例使用独立的临时 SQLite 数据库"""
-    import sqlite3
-    from app.api import ingest as ingest_mod
-
-    tmp_db = tmp_path / "test.db"
-    original_db = db_module._db
-    original_ingest = ingest_mod._ingest_service
-
-    db_module._db = Database.__new__(Database)
-    conn = sqlite3.connect(str(tmp_db), check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    db_module._db.conn = conn
-    db_module._db._init_tables()
-
-    # 重置单例，强制在每个测试中重建
-    ingest_mod._ingest_service = None
-
-    yield db_module._db
-
-    conn.close()
-    db_module._db = original_db
-    ingest_mod._ingest_service = original_ingest
-
-
-# =========================================================================
 # Fixtures：mock 掉 ChromaDB / Embedding，避免真实网络调用
+# _isolate_db 在 conftest.py 中（autouse），每个测试使用独立 SQLite
+# =========================================================================
 # =========================================================================
 
 
