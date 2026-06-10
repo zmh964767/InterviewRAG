@@ -1,7 +1,11 @@
 """测试共享 fixtures"""
 
+import os
 import pytest
 from fastapi.testclient import TestClient
+
+# CI 没有 .env 文件,确保 RAGService 初始化时不会因缺少 API key 崩溃
+os.environ.setdefault("ZHIPU_API_KEY", "test-key-for-ci")
 
 from app.main import app
 
