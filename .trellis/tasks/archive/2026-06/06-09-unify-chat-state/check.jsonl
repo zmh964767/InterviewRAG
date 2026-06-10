@@ -1,2 +1,0 @@
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Check pass: no `any`, components under 150 lines, no inline fetch, no @ts-ignore. Refactored ChatProvider must keep imports clean."}
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Verify single source of truth: only one useState path for conversations (in ChatProvider), no other useConversations() instances, ConversationsBootstrap removed."}

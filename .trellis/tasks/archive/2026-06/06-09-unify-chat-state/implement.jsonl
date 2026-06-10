@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/state-management.md", "reason": "Frontend state strategy: prefer local hooks + Context, no global store. Justifies the ChatContext consolidation approach in design.md."}
-{"file": ".trellis/spec/frontend/type-safety.md", "reason": "Frontend type-safety rules: no `any`, props via `interface`, API response typed. Applies to ChatContextValue and Message shapes in the refactor."}
-{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "Quality rules: API calls via lib/api.ts, no `any`, no inline styles. ChatProvider must consume queryStream from @/lib/api."}
-{"file": ".trellis/spec/frontend/hook-guidelines.md", "reason": "Hook rules: use* prefix, single responsibility, return object. useConversations stays as a thin adapter; ChatContext is the canonical source."}

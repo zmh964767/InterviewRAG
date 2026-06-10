@@ -15,6 +15,8 @@ build/
 # Data (large files)
 backend/data/chroma/
 backend/data/processed/
+backend/data/interview.db
+data/
 *.db
 
 # Node
@@ -33,6 +35,13 @@ out/
 docs/screenshots/
 .playwright-mcp/
 *.png
+
+# Test coverage
+.coverage
+backend/.coverage
+backend/coverage.xml
+frontend/coverage/
+htmlcov/
 
 # OS
 .DS_Store
@@ -54,3 +63,7 @@ Thumbs.db
 # Agent runtime (local tooling, not project source)
 .codex/
 .agents/
+
+# AI 工具工作流(本机使用,不公开 — 含 AI 开发痕迹)
+.claude/
+.trellis/
