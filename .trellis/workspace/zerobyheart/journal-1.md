@@ -439,3 +439,45 @@
 
 - 继续补覆盖率(其他模块如 parsers/services 还需补)
 - 或开始新方向: RAG 调参 / BGE Re-ranker Windows 卡死根治
+
+
+## Session 7: 质量门禁 + 后端补测
+
+**Date**: 2026-06-10
+**Task**: 质量门禁 + 后端补测
+**Branch**: `master`
+
+### Summary
+
+接 GitHub Actions CI（后端 pytest + 前端 vitest/lint/build），修复 3 个后端测试 bug（mock list 引用、SQLite 隔离、HTTPException），加 12 个新测试（stream_generator 6 + IngestService 6）覆盖 SSE 流式和多源导入。覆盖率：query.py 53%→94%, ingest_service.py 0%→76%。配 SSH (443 端口) push 到 GitHub，CI 6 runs 全绿，Branch Protection 启用。配 .gitignore 排除 coverage 产物。
+
+### Main Changes
+
+(Add details)
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `da2e28c` | (see git log) |
+| `922a870` | (see git log) |
+| `f72ee2b` | (see git log) |
+| `898d7dc` | (see git log) |
+| `43c574b` | (see git log) |
+| `f256c98` | (see git log) |
+| `b61920c` | (see git log) |
+| `d9d25af` | (see git log) |
+| `62396f9` | (see git log) |
+| `e08bb38` | (see git log) |
+
+### Testing
+
+- [OK] (Add test results)
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete
