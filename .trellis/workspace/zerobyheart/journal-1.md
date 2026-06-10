@@ -313,3 +313,60 @@
 ### Next Steps
 
 - None - task complete
+
+## Session 7: 项目状态盘点 + 小事收尾 (2026-06-10)
+
+**Task**: 阶段性盘点 — 看看下一步做什么
+**Branch**: `master`
+
+### 状态盘点
+
+项目健康度 ≈ 8/10。近 30 个 commit 全部合入 master,主线功能完整:
+- RAG Pipeline(混合检索 + Small-to-Big + BGE Re-ranker)
+- RAGAS 0.4.3 集成 + baseline(faithfulness=0.667, answer_relevancy=0.717)
+- 评估 Web UI(`/eval`) + highlight.js 代码高亮
+- ChatContext 状态统一(20 个 Vitest 单测) + hydration guard
+- ESLint 8 接入(0 warnings) + P0/P1 安全修复(路径遍历/CORS/asyncio/并发)
+- 后端 8 个 pytest 文件;前端 20 个测试
+
+### 下一步候选(已和用户讨论)
+
+| 方向 | 价值 | 建议 |
+|---|---|---|
+| **A 质量门禁:CI + 测试补全** | 高(防 P0 回归) | **下次会话主推** |
+| B BGE Re-ranker Windows 卡死 | 中(运维向) | 看时间 |
+| C RAG 调参 + 检索改写 | 中(数据向) | 评估体系已就位 |
+| D 端到端性能埋点 | 中 | 门槛低 |
+| E 鉴权/RBAC | 低(单用户 demo) | 部署再说 |
+
+**用户拍板**:下次会话优先做 **A(质量门禁:CI + 测试补全)**,本次只做小事收尾。
+
+### 本次收尾(3 件事)
+
+1. **补 .gitignore**(根):
+   - `.codegraph/daemon.pid` — 本机 daemon 进程 ID,不该进 git
+   - `*.tsbuildinfo` — TS 增量编译缓存,任何 Node 项目都该忽略
+   - `.trellis/.template-hashes.json` / `.trellis/.version` — Trellis 本地状态
+   - `.codex/` / `.agents/` — agent runtime 目录,本机工具非项目源码
+2. **`git rm --cached`** 4 个之前误 tracked 的本机状态文件(保留工作区副本):
+   - `.codegraph/daemon.pid`、`.trellis/.template-hashes.json`、`.trellis/.version`、`frontend/tsconfig.tsbuildinfo`
+3. **journal 本条记录**(就是这一段)
+
+### 验证
+
+`git status` 现状:仅 `.gitignore` 修改 + 4 个 D(delete-from-index) + 0 个 untracked。干净。
+
+### 留给下次会话的入口
+
+直接新建 Trellis 父任务 `06-10-ci-coverage`,子任务:
+- 子 1:`.github/workflows/ci.yml` — 后端 pytest + 前端 vitest + ESLint + (可选) build
+- 子 2:后端高风险模块补 Vitest(path_guard / ingest / query SSE 流式 partial)
+- 可选子 3:pre-commit hook(本地质量门禁)
+
+### Status
+
+[OK] **收尾完成**,工作区干净,等下次会话开 Trellis 任务。
+
+### Next Steps
+
+- 下次会话:开 `06-10-ci-coverage` 父任务,优先做 CI workflow
