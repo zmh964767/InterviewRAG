@@ -411,3 +411,31 @@
 
 - 独立任务: `06-10-backend-tests` — 补 path_guard / query SSE / ingest 高风险模块测试
 - 或: RAG 调参 — 用评估体系做检索参数扫描
+
+## Session 9: 后端高风险模块补测试 (2026-06-10 晚)
+
+**Task**: 06-10-backend-tests
+**Branch**: `master`
+
+### 完成内容
+
+- `test_stream_generator.py`: 6 用例(正常/CancelledError/异常)
+- `test_ingest_service.py`: 6 用例(md/pdf/url happy + 去重 + 异常路径)
+- `conftest.py`: `_isolate_db` 改为 autouse,所有测试共享
+- `test_questions_api.py`: 移除重复的 `_isolate_db`
+
+### 关键决策
+
+- CancelledError 测试用 mock `rag_service.query_stream` 抛异常,不依赖 transport 层
+- IngestService 测试复用现有 `fake_vs` 模式,只增不删
+
+### 结果
+
+- 110 tests passed (98→110, +12)
+- 覆盖率: query.py 53%→94%, ingest_service.py 0%→76%
+- CI Run #6 全绿
+
+### Next Steps
+
+- 继续补覆盖率(其他模块如 parsers/services 还需补)
+- 或开始新方向: RAG 调参 / BGE Re-ranker Windows 卡死根治
