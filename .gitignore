@@ -67,3 +67,5 @@ Thumbs.db
 # AI 工具工作流(本机使用,不公开 — 含 AI 开发痕迹)
 .claude/
 .trellis/
+.cursor/
+.codegraph/
