@@ -7,9 +7,43 @@
 """
 
 import pytest
+import tempfile
 
+from app.models.database import Database
 from app.services.task_store import store as task_store
 from app.services import ingest_service as ingest_service_module
+import app.core.db as db_module
+
+
+# =========================================================================
+# Fixtures：mock 掉 ChromaDB / Embedding / SQLite，避免真实网络和数据库调用
+# =========================================================================
+
+
+@pytest.fixture(autouse=True)
+def _isolate_db(tmp_path):
+    """每个测试用例使用独立的临时 SQLite 数据库"""
+    import sqlite3
+    from app.api import ingest as ingest_mod
+
+    tmp_db = tmp_path / "test.db"
+    original_db = db_module._db
+    original_ingest = ingest_mod._ingest_service
+
+    db_module._db = Database.__new__(Database)
+    conn = sqlite3.connect(str(tmp_db), check_same_thread=False)
+    conn.row_factory = sqlite3.Row
+    db_module._db.conn = conn
+    db_module._db._init_tables()
+
+    # 重置单例，强制在每个测试中重建
+    ingest_mod._ingest_service = None
+
+    yield db_module._db
+
+    conn.close()
+    db_module._db = original_db
+    ingest_mod._ingest_service = original_ingest
 
 
 # =========================================================================
@@ -73,17 +107,21 @@ class _FakeVectorStore:
 
 @pytest.fixture
 def fake_vs(monkeypatch):
-    """替换 VectorStore 为假实现"""
+    """替换 VectorStore 为假实现，保留 _isolate_db 提供的真实 db"""
     fake = _FakeVectorStore()
 
     def _factory():
         return fake
 
+    def _init_patched(self):
+        self.vector_store = fake
+        self.db = db_module._db  # 每次调用时从 module 读取，而非捕获固定引用
+
     monkeypatch.setattr("app.core.vectorstore.VectorStore", _factory)
     monkeypatch.setattr("app.api.questions._get_vs", lambda: fake)
     monkeypatch.setattr(
         "app.services.ingest_service.IngestService.__init__",
-        lambda self: setattr(self, "vector_store", fake) or setattr(self, "db", None),
+        _init_patched,
     )
     return fake
 

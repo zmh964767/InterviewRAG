@@ -81,9 +81,16 @@ class TestQueryWithMock:
             json={"question": "问题2", "chat_history": history, "stream": False},
         )
         assert response.status_code == 200
-        # 验证 history 被传递给 RAG service
+        # rag_service.query 在 endpoint append 之前被调用，
+        # 所以 mock 存的是 list 引用，endpoint 后续 mutate 了 list
+        # 验证 call 时传入了原始 history（包含当前 Q&A 对后长度变为 4）
         call_args = mock_query.call_args
-        assert call_args.kwargs["chat_history"] == history
+        passed = call_args.kwargs["chat_history"]
+        # 原始 2 条 + endpoint 追加的 1 对(Q+A) = 4
+        assert len(passed) == 4
+        assert passed[0] == history[0]
+        assert passed[1] == history[1]
+        assert passed[2] == {"role": "user", "content": "问题2"}
 
     @patch("app.services.rag_service.RAGService.query")
     def test_query_conversation_id(self, mock_query, client):

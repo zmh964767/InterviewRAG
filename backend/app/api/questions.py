@@ -6,7 +6,7 @@ DELETE /api/questions/{id}  — 删除单条（先 ChromaDB 再 SQLite，安全�
 
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from app.core.db import get_db
 from app.core.exceptions import NotFoundError
@@ -68,7 +68,7 @@ async def delete_question(question_id: str):
         vs.delete_by_id(question_id)
     except Exception as e:
         logger.error(f"ChromaDB 删除失败: {e}")
-        raise
+        raise HTTPException(status_code=500, detail=f"ChromaDB 删除失败: {e}")
 
     # 2. 再 SQLite
     if not db.delete_by_id(question_id):
