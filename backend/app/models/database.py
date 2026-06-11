@@ -20,8 +20,9 @@ class Database:
         db_path = Path(settings.sqlite_db_path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.conn = sqlite3.connect(str(db_path))
+        self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self._init_tables()
 
     def _init_tables(self):
@@ -177,6 +178,15 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM questions")
         return cursor.fetchone()[0]
+
+    def count_by_category(self) -> dict[str, int]:
+        """按分类聚合计数（SQL 层面，不拉全量数据）"""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT COALESCE(NULLIF(category, ''), '未分类'), COUNT(*) "
+            "FROM questions GROUP BY COALESCE(NULLIF(category, ''), '未分类')"
+        )
+        return {row[0]: row[1] for row in cursor.fetchall()}
 
     def close(self):
         """关闭连接"""

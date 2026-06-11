@@ -8,7 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import get_settings
+from app.core import db as db_module
 from app.core.exceptions import AppError
+from app.models.database import Database
+from app.services.rag_service import RAGService
 from app.api import query, ingest, health, stats, questions
 from app.api import eval as eval_router
 
@@ -22,14 +25,26 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期管理"""
+    """应用生命周期管理：统一初始化 / 清理所有共享实例"""
     import os
+
     # 设置 HuggingFace 国内镜像（Re-ranker 模型下载）
     if not os.environ.get("HF_ENDPOINT"):
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+
     settings = get_settings()
     logger.info(f"启动 InterviewRAG，ChromaDB 路径: {settings.chroma_persist_dir}")
+
+    # 统一初始化共享实例
+    db = Database()
+    db_module.set_db(db)   # core/db.py 共享同一实例
+    app.state.db = db
+    app.state.rag = RAGService()
+
     yield
+
+    # 清理
+    db_module.close_db()
     logger.info("关闭 InterviewRAG")
 
 
@@ -40,10 +55,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS 配置
+# CORS 配置（从 settings 读取，部署时通过 .env 配置域名）
+_cors_origins = get_settings().cors_origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,7 +1,6 @@
 """API 端点测试（Mock 外部服务，快速运行）"""
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestHealthEndpoint:
@@ -49,16 +48,21 @@ class TestQueryValidation:
 
 
 class TestQueryWithMock:
-    """问答接口（Mock LLM，快速验证流程）"""
+    """问答接口（Mock LLM，快速验证流程）
 
-    @patch("app.services.rag_service.RAGService.query")
-    def test_query_non_stream(self, mock_query, client):
-        mock_query.return_value = {
+    conftest 的 client fixture 通过 dependency_overrides 注入 _FakeRAGService。
+    这里直接给 fake_rag 实例挂 query 属性来控制返回值。
+    """
+
+    def test_query_non_stream(self, client, fake_rag):
+        from unittest.mock import AsyncMock
+
+        fake_rag.query = AsyncMock(return_value={
             "answer": "测试回答内容",
             "sources": [
                 {"id": "test-1", "question": "测试题目", "answer": "测试答案", "score": 0.9, "category": "LLM"}
             ],
-        }
+        })
         response = client.post(
             "/api/query",
             json={"question": "测试问题", "stream": False},
@@ -69,9 +73,12 @@ class TestQueryWithMock:
         assert len(data["sources"]) == 1
         assert data["sources"][0]["question_text"] == "测试题目"
 
-    @patch("app.services.rag_service.RAGService.query")
-    def test_query_with_history(self, mock_query, client):
-        mock_query.return_value = {"answer": "回答", "sources": []}
+    def test_query_with_history(self, client, fake_rag):
+        from unittest.mock import AsyncMock
+
+        mock_query = AsyncMock(return_value={"answer": "回答", "sources": []})
+        fake_rag.query = mock_query
+
         history = [
             {"role": "user", "content": "问题1"},
             {"role": "assistant", "content": "回答1"},
@@ -81,9 +88,6 @@ class TestQueryWithMock:
             json={"question": "问题2", "chat_history": history, "stream": False},
         )
         assert response.status_code == 200
-        # rag_service.query 在 endpoint append 之前被调用，
-        # 所以 mock 存的是 list 引用，endpoint 后续 mutate 了 list
-        # 验证 call 时传入了原始 history（包含当前 Q&A 对后长度变为 4）
         call_args = mock_query.call_args
         passed = call_args.kwargs["chat_history"]
         # 原始 2 条 + endpoint 追加的 1 对(Q+A) = 4
@@ -92,9 +96,10 @@ class TestQueryWithMock:
         assert passed[1] == history[1]
         assert passed[2] == {"role": "user", "content": "问题2"}
 
-    @patch("app.services.rag_service.RAGService.query")
-    def test_query_conversation_id(self, mock_query, client):
-        mock_query.return_value = {"answer": "回答", "sources": []}
+    def test_query_conversation_id(self, client, fake_rag):
+        from unittest.mock import AsyncMock
+
+        fake_rag.query = AsyncMock(return_value={"answer": "回答", "sources": []})
         response = client.post(
             "/api/query",
             json={"question": "问题", "conversation_id": "test-conv-123", "stream": False},
@@ -103,9 +108,10 @@ class TestQueryWithMock:
         data = response.json()
         assert data["conversation_id"] == "test-conv-123"
 
-    @patch("app.services.rag_service.RAGService.query")
-    def test_query_generates_conversation_id(self, mock_query, client):
-        mock_query.return_value = {"answer": "回答", "sources": []}
+    def test_query_generates_conversation_id(self, client, fake_rag):
+        from unittest.mock import AsyncMock
+
+        fake_rag.query = AsyncMock(return_value={"answer": "回答", "sources": []})
         response = client.post(
             "/api/query",
             json={"question": "问题", "stream": False},

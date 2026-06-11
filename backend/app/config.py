@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     # 对话记忆
     memory_window: int = 10
 
+    # CORS（逗号分隔的域名列表，如 "http://localhost:3000,https://example.com"）
+    cors_origins: list[str] = ["http://localhost:3000"]
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

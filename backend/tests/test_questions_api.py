@@ -8,89 +8,7 @@
 
 import pytest
 
-import app.core.db as db_module
-
-
-# =========================================================================
-# Fixtures：mock 掉 ChromaDB / Embedding，避免真实网络调用
-# _isolate_db 在 conftest.py 中（autouse），每个测试使用独立 SQLite
-# =========================================================================
-# =========================================================================
-
-
-class _FakeEmbeddings:
-    """返回每个文本一个固定维度的伪向量"""
-
-    def __init__(self, dim: int = 8):
-        self.dim = dim
-
-    def __call__(self, input):  # noqa: A002
-        return [[0.1] * self.dim for _ in input]
-
-
-class _FakeCollection:
-    def __init__(self):
-        self.docs: dict[str, str] = {}
-
-    def add(self, ids, documents, metadatas, embeddings=None):
-        for i, d in zip(ids, documents):
-            self.docs[i] = d
-
-    def delete(self, ids):
-        for i in ids:
-            self.docs.pop(i, None)
-
-    def count(self):
-        return len(self.docs)
-
-
-class _FakeClient:
-    def __init__(self):
-        self.collection = _FakeCollection()
-
-    def get_or_create_collection(self, name, metadata=None, embedding_function=None):
-        return self.collection
-
-    def delete_collection(self, name):
-        self.collection = _FakeCollection()
-
-
-class _FakeVectorStore:
-    def __init__(self):
-        self.client = _FakeClient()
-        self.collection = self.client.collection
-        self.embed_fn = None
-
-    def add_documents(self, ids, documents, metadatas, embeddings=None):
-        self.collection.add(ids, documents, metadatas, embeddings)
-
-    def delete_by_id(self, qid):
-        self.collection.delete([qid])
-        return True
-
-    def count(self):
-        return self.collection.count()
-
-
-@pytest.fixture
-def fake_vs(monkeypatch):
-    """替换 VectorStore 为假实现，保留 _isolate_db 提供的真实 db"""
-    fake = _FakeVectorStore()
-
-    def _factory():
-        return fake
-
-    def _init_patched(self):
-        self.vector_store = fake
-        self.db = db_module._db  # 每次调用时从 module 读取，而非捕获固定引用
-
-    monkeypatch.setattr("app.core.vectorstore.VectorStore", _factory)
-    monkeypatch.setattr("app.api.questions._get_vs", lambda: fake)
-    monkeypatch.setattr(
-        "app.services.ingest_service.IngestService.__init__",
-        _init_patched,
-    )
-    return fake
+from app.api import deps as deps_mod
 
 
 # =========================================================================
@@ -101,7 +19,7 @@ def fake_vs(monkeypatch):
 class TestListQuestionsAPI:
     """GET /api/questions — 分页 + 过滤"""
 
-    def test_empty_returns_empty(self, client, fake_vs):
+    def test_empty_returns_empty(self, client):
         res = client.get("/api/questions")
         assert res.status_code == 200
         body = res.json()
@@ -111,18 +29,18 @@ class TestListQuestionsAPI:
         assert body["size"] == 20
         assert body["categories"] == []
 
-    def test_pagination_params(self, client, fake_vs):
+    def test_pagination_params(self, client):
         res = client.get("/api/questions?page=2&size=10")
         assert res.status_code == 200
         assert res.json()["page"] == 2
         assert res.json()["size"] == 10
 
-    def test_size_clamped(self, client, fake_vs):
+    def test_size_clamped(self, client):
         # size > 100 应被 Query(le=100) 拒绝
         res = client.get("/api/questions?size=200")
         assert res.status_code == 422
 
-    def test_filters_propagate(self, client, fake_vs):
+    def test_filters_propagate(self, client):
         # 通过 client 先插入数据需要直接调 Database，这里简化：仅验证 query 接受参数
         res = client.get(
             "/api/questions?q=test&category=前端&difficulty=中等"
@@ -140,28 +58,29 @@ class TestListQuestionsAPI:
 class TestDeleteQuestionAPI:
     """DELETE /api/questions/{id} — 双写一致性"""
 
-    def test_delete_nonexistent_returns_404(self, client, fake_vs):
+    def test_delete_nonexistent_returns_404(self, client):
         res = client.delete("/api/questions/nonexistent")
         assert res.status_code == 404
         assert "未找到" in res.json()["detail"]
 
-    def test_delete_calls_chromadb_first(self, client, fake_vs):
+    def test_delete_calls_chromadb_first(self, client):
         """ChromaDB 失败时不删 SQLite"""
 
-        class _RaisingVS(_FakeVectorStore):
+        class _RaisingVS:
             def delete_by_id(self, qid):
                 raise RuntimeError("ChromaDB 异常")
 
-        # 替换 _get_vs 为会抛异常的版本
-        import app.api.questions as qmod
+        class _RaisingRAG:
+            vector_store = _RaisingVS()
 
-        original_get_vs = qmod._get_vs
-        qmod._get_vs = lambda: _RaisingVS()
+        from app.main import app
+
+        app.dependency_overrides[deps_mod.get_rag_service] = lambda: _RaisingRAG()
         try:
             res = client.delete("/api/questions/anyid")
             assert res.status_code == 500
         finally:
-            qmod._get_vs = original_get_vs
+            app.dependency_overrides.pop(deps_mod.get_rag_service, None)
 
 
 # =========================================================================
@@ -172,11 +91,11 @@ class TestDeleteQuestionAPI:
 class TestInsertOneAPI:
     """POST /api/ingest/insert-one — 撤销机制"""
 
-    def test_missing_fields(self, client, fake_vs):
+    def test_missing_fields(self, client):
         res = client.post("/api/ingest/insert-one", json={})
         assert res.status_code == 422
 
-    def test_duplicate_returns_409(self, client, fake_vs):
+    def test_duplicate_returns_409(self, client):
         payload = {
             "question": "Q?",
             "answer": "A.",
@@ -193,7 +112,7 @@ class TestInsertOneAPI:
         assert res2.status_code == 409
         assert "已存在" in res2.json()["detail"]
 
-    def test_stable_id(self, client, fake_vs):
+    def test_stable_id(self, client):
         payload = {
             "question": "测试 ID",
             "answer": "测试答案",

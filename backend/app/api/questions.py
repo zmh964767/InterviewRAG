@@ -6,28 +6,19 @@ DELETE /api/questions/{id}  — 删除单条（先 ChromaDB 再 SQLite，安全�
 
 import logging
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.core.db import get_db
+from app.api.deps import get_db, get_rag_service
 from app.core.exceptions import NotFoundError
-from app.core.vectorstore import VectorStore
+from app.models.database import Database
 from app.models.schemas import (
     DeleteQuestionResponse,
     QuestionListResponse,
 )
+from app.services.rag_service import RAGService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-# 模块级单例（仅 VectorStore 需要 lazy init，Database 走共享单例）
-_vs: VectorStore | None = None
-
-
-def _get_vs() -> VectorStore:
-    global _vs
-    if _vs is None:
-        _vs = VectorStore()
-    return _vs
 
 
 @router.get("/questions", response_model=QuestionListResponse)
@@ -37,9 +28,9 @@ async def list_questions(
     q: str = Query("", description="搜索关键词（题面+答案）"),
     category: str = Query("", description="分类精确匹配"),
     difficulty: str = Query("", description="难度精确匹配"),
+    db: Database = Depends(get_db),
 ):
     """分页查询题目，支持关键词+分类+难度三维过滤"""
-    db = get_db()
     filters = {"q": q, "category": category, "difficulty": difficulty}
     items, total = db.list_questions(filters, page, size)
     categories = db.list_categories()
@@ -53,19 +44,20 @@ async def list_questions(
 
 
 @router.delete("/questions/{question_id}", response_model=DeleteQuestionResponse)
-async def delete_question(question_id: str):
+async def delete_question(
+    question_id: str,
+    db: Database = Depends(get_db),
+    rag: RAGService = Depends(get_rag_service),
+):
     """删除单条题目
 
     顺序（安全失败方向）：
     1. ChromaDB：失败 → 500，两边都还在
     2. SQLite：失败 → 500，列表少一条但聊天搜不到（最坏失败方向）
     """
-    db = get_db()
-    vs = _get_vs()
-
     # 1. 先 ChromaDB
     try:
-        vs.delete_by_id(question_id)
+        rag.vector_store.delete_by_id(question_id)
     except Exception as e:
         logger.error(f"ChromaDB 删除失败: {e}")
         raise HTTPException(status_code=500, detail=f"ChromaDB 删除失败: {e}")

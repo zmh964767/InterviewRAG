@@ -12,8 +12,9 @@ import hashlib
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from app.api.deps import get_rag_service
 from app.core.exceptions import NotFoundError, ValidationError
 from app.models.schemas import (
     IngestTaskAccepted,
@@ -23,19 +24,20 @@ from app.models.schemas import (
     TaskStatusResponse,
 )
 from app.services.ingest_service import IngestService
+from app.services.rag_service import RAGService
 from app.services.task_store import store as task_store
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 模块级单例
+# IngestService 单例（首次请求时用 RAGService 的 VectorStore 初始化）
 _ingest_service: IngestService | None = None
 
 
-def _get_ingest_service() -> IngestService:
+def _get_ingest_service(rag: RAGService) -> IngestService:
     global _ingest_service
     if _ingest_service is None:
-        _ingest_service = IngestService()
+        _ingest_service = IngestService(vector_store=rag.vector_store)
     return _ingest_service
 
 
@@ -87,7 +89,7 @@ async def _run_task(task_id: str, coro) -> None:
     response_model=IngestTaskAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def ingest_endpoint(request: dict):
+async def ingest_endpoint(request: dict, rag: RAGService = Depends(get_rag_service)):
     """从服务端文件路径或 URL 异步导入
 
     Body: {"source": "data/questions.md", "source_type": "md|pdf|url"}
@@ -101,7 +103,7 @@ async def ingest_endpoint(request: dict):
     if source_type not in ("md", "pdf", "url"):
         raise ValidationError(f"不支持的 source_type: {source_type}")
 
-    service = _get_ingest_service()
+    service = _get_ingest_service(rag)
     task = task_store.create(source_type, source)
 
     if source_type == "md":
@@ -119,7 +121,7 @@ async def ingest_endpoint(request: dict):
     response_model=IngestTaskAccepted,
     status_code=status.HTTP_202_ACCEPTED,
 )
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), rag: RAGService = Depends(get_rag_service)):
     """上传文件异步导入"""
     filename = file.filename or "unknown"
     content = await file.read()
@@ -127,7 +129,7 @@ async def upload_file(file: UploadFile = File(...)):
     if not (filename.endswith(".md") or filename.endswith(".pdf")):
         raise ValidationError(f"仅支持 .md / .pdf 文件: {filename}")
 
-    service = _get_ingest_service()
+    service = _get_ingest_service(rag)
     task = task_store.create("upload", filename)
 
     if filename.endswith(".md"):
@@ -140,7 +142,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 
 @router.post("/ingest/insert-one", response_model=Question, status_code=201)
-async def insert_one(request: InsertOneRequest):
+async def insert_one(request: InsertOneRequest, rag: RAGService = Depends(get_rag_service)):
     """单条插入（撤销机制用）
 
     id 由后端基于 md5(question|answer)[:16] 生成
@@ -151,7 +153,7 @@ async def insert_one(request: InsertOneRequest):
         f"{request.question}|{request.answer}".encode()
     ).hexdigest()[:16]
 
-    service = _get_ingest_service()
+    service = _get_ingest_service(rag)
 
     # 构造 Question 对象
     q = Question(

@@ -8,12 +8,63 @@ from fastapi.testclient import TestClient
 
 from app.models.database import Database
 import app.core.db as db_module
+from app.api import deps as deps_mod
 from app.api import ingest as ingest_mod
 
 # CI 没有 .env 文件,确保 RAGService 初始化时不会因缺少 API key 崩溃
 os.environ.setdefault("ZHIPU_API_KEY", "test-key-for-ci")
 
-from app.main import app
+
+class _FakeCollection:
+    """内存 ChromaDB 替身"""
+
+    def __init__(self):
+        self.docs: dict[str, str] = {}
+
+    def add(self, ids, documents, metadatas=None, embeddings=None):
+        for i, d in zip(ids, documents):
+            self.docs[i] = d
+
+    def delete(self, ids):
+        for i in ids:
+            self.docs.pop(i, None)
+
+    def count(self):
+        return len(self.docs)
+
+
+class _FakeVectorStore:
+    def __init__(self, *args, **kwargs):
+        self.collection = _FakeCollection()
+
+    def add_documents(self, ids, documents, metadatas, embeddings=None):
+        self.collection.add(ids, documents, metadatas, embeddings)
+
+    def delete_by_id(self, qid):
+        self.collection.delete([qid])
+        return True
+
+    def count(self):
+        return self.collection.count()
+
+    def get_all(self):
+        return {"documents": [], "metadatas": []}
+
+    def query(self, *args, **kwargs):
+        return {"ids": [[]], "documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+
+class _FakeRAGService:
+    """最小化 RAGService 替身，只实现 health 用到的属性"""
+
+    def __init__(self):
+        self.vector_store = _FakeVectorStore()
+
+        class _FakeLLM:
+            def check_health(self_):
+                return "ok"
+
+        self.llm_service = _FakeLLM()
 
 
 @pytest.fixture(autouse=True)
@@ -23,15 +74,17 @@ def _isolate_db(tmp_path):
     original_db = db_module._db
     original_ingest = ingest_mod._ingest_service
 
-    db_module._db = Database.__new__(Database)
+    db = Database.__new__(Database)
     conn = sqlite3.connect(str(tmp_db), check_same_thread=False)
     conn.row_factory = sqlite3.Row
-    db_module._db.conn = conn
-    db_module._db._init_tables()
+    conn.execute("PRAGMA journal_mode=WAL")
+    db.conn = conn
+    db._init_tables()
+    db_module.set_db(db)
 
     ingest_mod._ingest_service = None  # 重置单例
 
-    yield db_module._db
+    yield db
 
     conn.close()
     db_module._db = original_db
@@ -39,9 +92,31 @@ def _isolate_db(tmp_path):
 
 
 @pytest.fixture
-def client():
-    """FastAPI 测试客户端"""
-    return TestClient(app)
+def client(monkeypatch, fake_rag):
+    """FastAPI 测试客户端
+
+    1. monkeypatch RAGService.__init__ 让 lifespan 不做真实网络调用
+    2. dependency_overrides 让所有 Depends(get_rag_service) 返回假实例
+    3. TestClient(app) 自动触发 lifespan → app.state.db / app.state.rag 初始化
+    """
+    from app.main import app
+    from app.services import rag_service as rag_mod
+
+    # 替换 RAGService.__init__，让 lifespan 里的 RAGService() 不走真实初始化
+    monkeypatch.setattr(rag_mod.RAGService, "__init__", _FakeRAGService.__init__)
+
+    # 覆盖依赖注入：路由拿到的是 fake_rag 实例
+    app.dependency_overrides[deps_mod.get_rag_service] = lambda: fake_rag
+
+    yield TestClient(app)
+
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def fake_rag():
+    """可被测试直接操作的 FakeRAGService 实例（query 等方法可在测试里覆盖）"""
+    return _FakeRAGService()
 
 
 @pytest.fixture

@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 class IngestService:
     """数据导入服务"""
 
-    def __init__(self):
-        self.vector_store = VectorStore()
+    def __init__(self, vector_store: VectorStore | None = None):
+        self.vector_store = vector_store or VectorStore()
         self.db = get_db()
         self.settings = get_settings()
 
