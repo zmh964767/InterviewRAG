@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatContext } from '@/contexts/ChatContext'
 import { getStats } from '@/lib/api'
 import type { StatsResponse } from '@/lib/types'
@@ -115,12 +116,14 @@ export default function Home() {
           </div>
         </header>
 
-        <ChatHistory
-          messages={currentMessages}
-          isLoading={isLoading}
-          onSend={handleSend}
-          onRegenerate={handleRegenerate}
-        />
+        <ErrorBoundary>
+          <ChatHistory
+            messages={currentMessages}
+            isLoading={isLoading}
+            onSend={handleSend}
+            onRegenerate={handleRegenerate}
+          />
+        </ErrorBoundary>
 
         <ChatInput onSend={handleSend} isLoading={isLoading} />
       </div>

@@ -43,6 +43,7 @@ export async function* queryStream(
   question: string,
   conversationId?: string,
   chatHistory?: Array<{ role: string; content: string }>,
+  signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
   const res = await fetch(`${API_BASE}/api/query`, {
     method: 'POST',
@@ -53,6 +54,7 @@ export async function* queryStream(
       chat_history: chatHistory,
       stream: true,
     }),
+    signal,
   })
 
   if (!res.ok) {

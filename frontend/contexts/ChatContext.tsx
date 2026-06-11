@@ -266,7 +266,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let sources: SourceRef[] = []
 
       try {
-        for await (const event of queryStream(content, conversationId, [])) {
+        for await (const event of queryStream(content, conversationId, [], abortRef.current?.signal)) {
           if (event.error) break
 
           if (event.content) {
@@ -326,6 +326,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchConversation = useCallback((id: string) => {
+    // 切换对话时中止当前流式请求
+    abortRef.current?.abort()
     setCurrentId(id)
   }, [])
 

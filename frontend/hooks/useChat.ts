@@ -12,12 +12,14 @@ interface UseChatOptions {
 export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
   const [isLoading, setIsLoading] = useState(false)
   const streamingConvIdRef = useRef<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
   // 用 ref 保存流式 partial content，组件 unmount/路由切换也不丢
   const partialRef = useRef<{ convId: string; aiMsgId: string; content: string; sources: SourceRef[] } | null>(null)
 
-  // 组件 unmount 时把 partial content 写回 store
+  // 组件 unmount 时中止请求 + 写回 partial content
   useEffect(() => {
     return () => {
+      abortRef.current?.abort()
       const p = partialRef.current
       if (p && p.content) {
         const msgs = getMessages(p.convId)
@@ -37,6 +39,10 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
 
     setIsLoading(true)
     streamingConvIdRef.current = conversationId
+
+    // 创建 AbortController，切换对话或 unmount 时可中止
+    const controller = new AbortController()
+    abortRef.current = controller
 
     const currentMessages = getMessages(conversationId)
 
@@ -72,7 +78,7 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
       let backendConvId: string | undefined = undefined
 
       try {
-        for await (const event of queryStream(content, backendConvId, historyForApi)) {
+        for await (const event of queryStream(content, backendConvId, historyForApi, controller.signal)) {
           if (event.error) throw new Error(event.error)
 
           if (event.content) {
@@ -130,6 +136,7 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
     } finally {
       setIsLoading(false)
       streamingConvIdRef.current = null
+      abortRef.current = null
     }
   }, [isLoading, onMessageUpdate, getMessages])
 

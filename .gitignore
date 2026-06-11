@@ -15,6 +15,7 @@ build/
 # Data (large files)
 backend/data/chroma/
 backend/data/processed/
+backend/data/raw/
 backend/data/interview.db
 data/
 *.db
