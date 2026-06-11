@@ -2,16 +2,25 @@
 
 融合向量检索（ChromaDB）和 BM25 关键词检索，
 使用 RRF（Reciprocal Rank Fusion）算法合并结果。
+
+BM25 分词使用 jieba（中文友好），索引通过版本号懒刷新自动保鲜。
 """
 
 import logging
-from rank_bm25 import BM25Okapi
+
+import jieba
 import numpy as np
+from rank_bm25 import BM25Okapi
 
 from app.config import get_settings
 from app.core.vectorstore import VectorStore
 
 logger = logging.getLogger(__name__)
+
+
+def _tokenize(text: str) -> list[str]:
+    """jieba 分词，过滤空白 token"""
+    return [w for w in jieba.cut(text) if w.strip()]
 
 
 class HybridRetriever:
@@ -23,6 +32,7 @@ class HybridRetriever:
         self.bm25_index: BM25Okapi | None = None
         self.corpus_texts: list[str] = []
         self.corpus_metas: list[dict] = []
+        self._index_doc_count: int = -1  # -1 表示未构建
         self._build_bm25_index()
 
     def _build_bm25_index(self):
@@ -31,18 +41,31 @@ class HybridRetriever:
             all_docs = self.vector_store.get_all()
             if not all_docs or not all_docs.get("documents"):
                 logger.warning("ChromaDB 为空，无法构建 BM25 索引")
+                self._index_doc_count = 0
                 return
 
             self.corpus_texts = all_docs["documents"]
             self.corpus_metas = all_docs["metadatas"] or [{}] * len(self.corpus_texts)
 
-            # 分词（简单按字符切分，中文场景）
-            tokenized = [list(text) for text in self.corpus_texts]
+            tokenized = [_tokenize(text) for text in self.corpus_texts]
             self.bm25_index = BM25Okapi(tokenized)
+            self._index_doc_count = len(self.corpus_texts)
 
-            logger.info(f"BM25 索引已构建，文档数: {len(self.corpus_texts)}")
+            logger.info(f"BM25 索引已构建（jieba），文档数: {self._index_doc_count}")
         except Exception as e:
             logger.error(f"构建 BM25 索引失败: {e}")
+
+    def _maybe_refresh(self):
+        """懒刷新：文档数变化时自动重建索引"""
+        try:
+            current = self.vector_store.count()
+        except Exception:
+            return
+        if current != self._index_doc_count:
+            logger.info(
+                f"BM25 索引过期（{self._index_doc_count} → {current}），自动重建"
+            )
+            self._build_bm25_index()
 
     def retrieve(
         self,
@@ -60,6 +83,8 @@ class HybridRetriever:
         Returns:
             按相关度排序的文档列表
         """
+        self._maybe_refresh()
+
         if alpha is None:
             alpha = 1 - self.settings.bm25_weight
 
@@ -104,7 +129,7 @@ class HybridRetriever:
             return []
 
         try:
-            tokenized_query = list(query)
+            tokenized_query = _tokenize(query)
             scores = self.bm25_index.get_scores(tokenized_query)
 
             # 获取 top-k 索引
@@ -165,5 +190,5 @@ class HybridRetriever:
         return results
 
     def refresh_index(self):
-        """刷新 BM25 索引（数据更新后调用）"""
+        """手动刷新 BM25 索引（外部调用，通常不需要 — _maybe_refresh 自动处理）"""
         self._build_bm25_index()
