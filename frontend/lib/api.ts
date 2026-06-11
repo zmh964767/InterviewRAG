@@ -3,8 +3,6 @@
 import type {
   QueryRequest,
   QueryResponse,
-  IngestRequest,
-  IngestResponse,
   HealthResponse,
   StatsResponse,
   StreamEvent,
@@ -68,6 +66,13 @@ export async function* queryStream(
   const decoder = new TextDecoder()
   let buffer = ''
 
+  // 监听 abort 信号，主动 cancel reader（避免 reader.read() 在 abort 后继续读到 stale 帧）
+  if (signal) {
+    signal.addEventListener('abort', () => {
+      reader.cancel().catch(() => {})
+    }, { once: true })
+  }
+
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
@@ -99,39 +104,17 @@ export async function* queryStream(
   }
 }
 
-/** 导入数据 */
-export async function ingest(request: IngestRequest): Promise<IngestResponse> {
-  const res = await fetch(`${API_BASE}/api/ingest`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  })
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ detail: '导入失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
-  }
-
-  return res.json()
-}
-
 /** 健康检查 */
 export async function healthCheck(): Promise<HealthResponse> {
   const res = await fetch(`${API_BASE}/api/health`)
   return res.json()
 }
 
-/** 知识库统计 */
-export async function getStats(): Promise<StatsResponse> {
-  const res = await fetch(`${API_BASE}/api/stats`)
-  return res.json()
-}
-
 // =========================================================================
-// 知识库管理
+// 知识库管理（公开只读）
 // =========================================================================
 
-/** 题目列表查询 */
+/** 题目列表查询（公开） */
 export async function listQuestions(
   request: QuestionListRequest = {},
 ): Promise<QuestionListResponse> {
@@ -150,10 +133,38 @@ export async function listQuestions(
   return res.json()
 }
 
-/** 删除单条题目 */
-export async function deleteQuestion(id: string): Promise<DeleteQuestionResponse> {
-  const res = await fetch(`${API_BASE}/api/questions/${encodeURIComponent(id)}`, {
+// =========================================================================
+// 管理端 API（带 JWT token）
+// =========================================================================
+
+function adminHeaders(): HeadersInit {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
+  const h: HeadersInit = { 'Content-Type': 'application/json' }
+  if (token) (h as Record<string, string>)['Authorization'] = `Bearer ${token}`
+  return h
+}
+
+/** 管理端：题目列表（功能同公开，但走 /api/admin/） */
+export async function adminListQuestions(
+  request: QuestionListRequest = {},
+): Promise<QuestionListResponse> {
+  const params = new URLSearchParams()
+  if (request.page) params.set('page', String(request.page))
+  if (request.size) params.set('size', String(request.size))
+  if (request.q) params.set('q', request.q)
+  if (request.category) params.set('category', request.category)
+  if (request.difficulty) params.set('difficulty', request.difficulty)
+
+  const res = await fetch(`${API_BASE}/api/admin/questions?${params.toString()}`, { headers: adminHeaders() })
+  if (!res.ok) throw new Error(`列表查询失败: HTTP ${res.status}`)
+  return res.json()
+}
+
+/** 管理端：删除题目 */
+export async function adminDeleteQuestion(id: string): Promise<DeleteQuestionResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/questions/${encodeURIComponent(id)}`, {
     method: 'DELETE',
+    headers: adminHeaders(),
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '删除失败' }))
@@ -162,11 +173,18 @@ export async function deleteQuestion(id: string): Promise<DeleteQuestionResponse
   return res.json()
 }
 
-/** 单条插入（撤销机制用） */
-export async function insertOne(request: InsertOneRequest): Promise<Question> {
-  const res = await fetch(`${API_BASE}/api/ingest/insert-one`, {
+/** 管理端：统计 */
+export async function adminGetStats(): Promise<StatsResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: adminHeaders() })
+  if (!res.ok) throw new Error('统计查询失败')
+  return res.json()
+}
+
+/** 管理端：单条插入 */
+export async function adminInsertOne(request: InsertOneRequest): Promise<Question> {
+  const res = await fetch(`${API_BASE}/api/admin/ingest/insert-one`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: adminHeaders(),
     body: JSON.stringify(request),
   })
   if (!res.ok) {
@@ -176,32 +194,14 @@ export async function insertOne(request: InsertOneRequest): Promise<Question> {
   return res.json()
 }
 
-/** 查询任务状态 */
-export async function getTaskStatus(taskId: string): Promise<TaskStatusResponse> {
-  const res = await fetch(`${API_BASE}/api/ingest/tasks/${encodeURIComponent(taskId)}`)
-  if (!res.ok) {
-    throw new Error(`任务查询失败: HTTP ${res.status}`)
-  }
-  return res.json()
-}
-
-/** 列出未完成任务 */
-export async function listActiveTasks(): Promise<TaskListResponse> {
-  const res = await fetch(`${API_BASE}/api/ingest/tasks`)
-  if (!res.ok) {
-    throw new Error(`任务列表查询失败: HTTP ${res.status}`)
-  }
-  return res.json()
-}
-
-/** 提交异步导入任务（md/pdf/url） */
-export async function submitIngestTask(
+/** 管理端：提交异步导入任务 */
+export async function adminSubmitIngestTask(
   source: string,
   sourceType: 'md' | 'pdf' | 'url',
 ): Promise<IngestTaskAccepted> {
-  const res = await fetch(`${API_BASE}/api/ingest`, {
+  const res = await fetch(`${API_BASE}/api/admin/ingest`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: adminHeaders(),
     body: JSON.stringify({ source, source_type: sourceType }),
   })
   if (!res.ok) {
@@ -211,12 +211,17 @@ export async function submitIngestTask(
   return res.json()
 }
 
-/** 上传文件导入 */
-export async function uploadIngestFile(file: File): Promise<IngestTaskAccepted> {
+/** 管理端：上传文件导入 */
+export async function adminUploadIngestFile(file: File): Promise<IngestTaskAccepted> {
+  const token = localStorage.getItem('admin_token')
+  const headers: HeadersInit = {}
+  if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
+
   const formData = new FormData()
   formData.append('file', file)
-  const res = await fetch(`${API_BASE}/api/ingest/upload`, {
+  const res = await fetch(`${API_BASE}/api/admin/ingest/upload`, {
     method: 'POST',
+    headers,
     body: formData,
   })
   if (!res.ok) {
@@ -226,23 +231,33 @@ export async function uploadIngestFile(file: File): Promise<IngestTaskAccepted> 
   return res.json()
 }
 
-// =========================================================================
-// 评估报告
-// =========================================================================
-
-/** 评估汇总（latest + history） */
-export async function getEvalSummary(): Promise<EvalSummaryResponse> {
-  const res = await fetch(`${API_BASE}/api/eval/summary`)
+/** 管理端：评估汇总 */
+export async function adminGetEvalSummary(): Promise<EvalSummaryResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/eval/summary`, { headers: adminHeaders() })
   if (!res.ok) throw new Error('Failed to fetch eval summary')
   return res.json()
 }
 
-/** 评估详情（latest 或指定历史快照） */
-export async function getEvalDetail(ts?: string): Promise<EvalDetailResponse> {
+/** 管理端：评估详情 */
+export async function adminGetEvalDetail(ts?: string): Promise<EvalDetailResponse> {
   const url = ts
-    ? `${API_BASE}/api/eval/detail?ts=${encodeURIComponent(ts)}`
-    : `${API_BASE}/api/eval/detail`
-  const res = await fetch(url)
+    ? `${API_BASE}/api/admin/eval/detail?ts=${encodeURIComponent(ts)}`
+    : `${API_BASE}/api/admin/eval/detail`
+  const res = await fetch(url, { headers: adminHeaders() })
   if (!res.ok) throw new Error('Failed to fetch eval detail')
+  return res.json()
+}
+
+/** 管理端：查询任务状态 */
+export async function adminGetTaskStatus(taskId: string): Promise<TaskStatusResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/ingest/tasks/${encodeURIComponent(taskId)}`, { headers: adminHeaders() })
+  if (!res.ok) throw new Error(`任务查询失败: HTTP ${res.status}`)
+  return res.json()
+}
+
+/** 管理端：列出未完成任务 */
+export async function adminListActiveTasks(): Promise<TaskListResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/ingest/tasks`, { headers: adminHeaders() })
+  if (!res.ok) throw new Error(`任务列表查询失败: HTTP ${res.status}`)
   return res.json()
 }

@@ -3,6 +3,19 @@
 import pytest
 
 
+@pytest.fixture
+def admin_token(client):
+    """获取管理员 JWT token 用于管理端 API 调用"""
+    res = client.post("/api/auth/login", json={"password": "admin123"})
+    assert res.status_code == 200
+    return res.json()["access_token"]
+
+
+@pytest.fixture
+def admin_headers(admin_token):
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
 class TestHealthEndpoint:
     """健康检查接口"""
 
@@ -20,15 +33,62 @@ class TestHealthEndpoint:
 
 
 class TestStatsEndpoint:
-    """统计接口"""
+    """统计接口（管理端）"""
 
-    def test_stats_returns_structure(self, client):
-        response = client.get("/api/stats")
+    def test_stats_returns_structure(self, client, admin_headers):
+        response = client.get("/api/admin/stats", headers=admin_headers)
         assert response.status_code == 200
         data = response.json()
         assert "total_questions" in data
         assert "categories" in data
         assert isinstance(data["categories"], dict)
+
+    def test_stats_requires_auth(self, client):
+        response = client.get("/api/admin/stats")
+        assert response.status_code == 401
+
+
+class TestAuthEndpoint:
+    """管理员登录"""
+
+    def test_login_success(self, client):
+        res = client.post("/api/auth/login", json={"password": "admin123"})
+        assert res.status_code == 200
+        data = res.json()
+        assert "access_token" in data
+        assert data["token_type"] == "bearer"
+
+    def test_login_wrong_password(self, client):
+        res = client.post("/api/auth/login", json={"password": "wrong"})
+        assert res.status_code == 401
+
+    def test_protected_route_with_valid_token(self, client, admin_headers):
+        res = client.get("/api/admin/stats", headers=admin_headers)
+        assert res.status_code == 200
+
+    def test_protected_route_with_invalid_token(self, client):
+        res = client.get("/api/admin/stats", headers={"Authorization": "Bearer invalid-token"})
+        assert res.status_code == 401
+
+
+class TestOldRoutesUnregistered:
+    """旧管理路由必须返回 404（PRD 验收：旧路由直接解注册，不做 deprecated）"""
+
+    def test_old_stats_returns_404(self, client):
+        res = client.get("/api/stats")
+        assert res.status_code == 404
+
+    def test_old_ingest_returns_404(self, client):
+        res = client.post("/api/ingest", json={"source": "x", "source_type": "md"})
+        assert res.status_code == 404
+
+    def test_old_eval_summary_returns_404(self, client):
+        res = client.get("/api/eval/summary")
+        assert res.status_code == 404
+
+    def test_old_delete_question_returns_404(self, client):
+        res = client.delete("/api/questions/some-id")
+        assert res.status_code == 404
 
 
 class TestQueryValidation:

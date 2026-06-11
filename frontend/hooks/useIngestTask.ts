@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { getTaskStatus } from '@/lib/api'
+import { adminGetTaskStatus } from '@/lib/api'
 import type { TaskStatusResponse } from '@/lib/types'
 
 const POLL_INTERVAL_MS = 1000
@@ -39,7 +39,7 @@ export function useIngestTask(): UseIngestTaskResult {
 
       const poll = async () => {
         try {
-          const status = await getTaskStatus(taskId)
+          const status = await adminGetTaskStatus(taskId)
           setTask(status)
           if (status.status === 'done' || status.status === 'failed') {
             stop()

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 
 import { ImportProgress } from '@/components/kb/ImportProgress'
 import { useIngestTask } from '@/hooks/useIngestTask'
-import { submitIngestTask, uploadIngestFile } from '@/lib/api'
+import { adminSubmitIngestTask, adminUploadIngestFile } from '@/lib/api'
 
 interface IngestModalProps {
   isOpen: boolean
@@ -57,7 +57,7 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
           setSubmitting(false)
           return
         }
-        const r = await uploadIngestFile(file)
+        const r = await adminUploadIngestFile(file)
         taskId = r.task_id
       } else if (tab === 'url') {
         if (!url.trim()) {
@@ -65,7 +65,7 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
           setSubmitting(false)
           return
         }
-        const r = await submitIngestTask(url.trim(), 'url')
+        const r = await adminSubmitIngestTask(url.trim(), 'url')
         taskId = r.task_id
       } else {
         if (!path.trim()) {
@@ -75,7 +75,7 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
         }
         // 简单判断扩展名决定 source_type
         const sourceType: 'md' | 'pdf' = path.endsWith('.pdf') ? 'pdf' : 'md'
-        const r = await submitIngestTask(path.trim(), sourceType)
+        const r = await adminSubmitIngestTask(path.trim(), sourceType)
         taskId = r.task_id
       }
       setHasCompleted(false)  // 重新开始任务时重置

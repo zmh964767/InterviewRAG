@@ -1,16 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatContext } from '@/contexts/ChatContext'
-import { getStats } from '@/lib/api'
-import type { StatsResponse } from '@/lib/types'
 
 export default function Home() {
-  const [stats, setStats] = useState<StatsResponse | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
 
@@ -75,16 +72,11 @@ export default function Home() {
     }
   }, [deleteConfirmId, deleteConversation])
 
-  useEffect(() => {
-    getStats().then(setStats).catch(() => {})
-  }, [])
-
   return (
     <div className="flex h-screen" style={{ background: 'var(--cream)' }}>
       <Sidebar
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
-        stats={stats}
         conversations={conversations}
         currentId={currentId}
         onCreateConversation={handleNewChat}

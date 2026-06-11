@@ -11,9 +11,10 @@
 - **流式输出**：SSE 实时返回答案，首字延迟 < 1s
 - **代码语法高亮**：highlight.js + github-dark 主题，Python/JS/JSON 等 190+ 种语言
 - **RAGAS 评估**：Faithfulness、Relevancy、Precision、Recall 四项指标
-- **评估报告 Web UI**：`/eval` 页面展示最新指标 + 历史快照（无需终端 `cat report.md`）
+- **评估报告 Web UI**：`/admin/eval` 页面展示最新指标 + 历史快照（无需终端 `cat report.md`）
 - **对比实验**：四种检索策略效果对比
 - **代码质量**：ESLint 8 + Next.js TypeScript 规则，0 warnings
+- **双端架构**：用户端（匿名访问问答 + 题目库只读）+ 管理端（JWT 鉴权的知识库/评估后台）
 
 ## 🏗️ 技术栈
 
@@ -38,7 +39,7 @@
 InterviewRAG/
 ├── backend/
 │   ├── app/
-│   │   ├── api/          # API 路由（query/ingest/eval/questions/health/stats）
+│   │   ├── api/          # API 路由（query/questions/health/auth/admin/*）
 │   │   ├── chains/       # LangChain 链
 │   │   ├── retrievers/   # 检索器（混合、小块大块）
 │   │   ├── rerankers/    # Re-ranking
@@ -49,7 +50,7 @@ InterviewRAG/
 │   ├── evaluation/       # 评估模块（结果在 results/ 下）
 │   └── data/             # 数据存储
 ├── frontend/
-│   ├── app/              # Next.js 页面（/ /kb /eval）
+│   ├── app/              # Next.js 页面（/ /questions /admin/*）
 │   ├── components/       # React 组件
 │   │   ├── chat/         # 对话组件（ChatMessage / ChatHistory / ChatInput）
 │   │   ├── eval/         # 评估组件（RagMetricsBar / ComparisonTable）
@@ -87,16 +88,20 @@ npm run dev
 # 访问 http://localhost:3000
 ```
 
-### 3. 知识库管理
+### 3. 题目库（用户端只读）
 
-访问 `http://localhost:3000/kb`：
+访问 `http://localhost:3000/questions`：
 - 查看题目列表（支持搜索、分类、难度过滤）
-- 上传 md/pdf 文件或输入 URL 导入
-- 删除单条题目（5 秒内可撤销）
+- 匿名访问，无需登录
 
-### 4. 评估系统
+### 4. 管理后台
 
-**Web UI**（推荐）：访问 `http://localhost:3000/eval`，查看最新指标 + 历史快照列表，点击展开详情。
+访问 `http://localhost:3000/admin/login`，输入 `ADMIN_PASSWORD`（默认 `admin123`）登录：
+- 仪表盘（统计总览 + 最近评估指标）
+- 知识库管理（`/admin/kb`）：上传 md/pdf/URL 导入、删除单条（5 秒内可撤销）
+- 评估报告（`/admin/eval`）：最新指标 + 历史快照列表
+
+JWT 存于 `localStorage.admin_token`，过期/失效自动跳转登录页。
 
 **命令行**（运行新评估）：
 
@@ -148,15 +153,16 @@ npm run lint      # ESLint 检查（0 warnings / errors）
 启动后端后访问：`http://localhost:8080/docs`
 
 **主要端点**：
-- `POST /api/query` — 问答（支持流式 SSE）
-- `GET /api/questions` — 题目列表（分页+过滤）
-- `POST /api/ingest/upload` — 上传文件导入
-- `POST /api/ingest/insert-one` — 单条插入（撤销用）
-- `DELETE /api/questions/{id}` — 删除单条
-- `GET /api/eval/summary` — 评估汇总（最新 + 历史快照列表）
-- `GET /api/eval/detail?ts=<ISO>` — 评估详情（latest 或指定历史快照）
-- `GET /api/health` — 健康检查
-- `GET /api/stats` — 知识库统计
+- `POST /api/auth/login` — 管理员登录（密码 → JWT）
+- `POST /api/query` — 问答（支持流式 SSE，公开）
+- `GET /api/questions` — 题目列表（公开，分页+过滤）
+- `GET /api/health` — 健康检查（公开）
+- `GET /api/admin/stats` — 知识库统计（需 JWT）
+- `POST /api/admin/ingest/upload` — 上传文件导入（需 JWT）
+- `POST /api/admin/ingest/insert-one` — 单条插入（撤销用，需 JWT）
+- `DELETE /api/admin/questions/{id}` — 删除单条（需 JWT）
+- `GET /api/admin/eval/summary` — 评估汇总（需 JWT）
+- `GET /api/admin/eval/detail?ts=<ISO>` — 评估详情（需 JWT）
 
 ## 🔧 调优记录
 

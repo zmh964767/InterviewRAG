@@ -14,12 +14,16 @@ interface ChatHistoryProps {
 export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatHistoryProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
   const prevLenRef = useRef(messages.length)
+  // 标记组件是否刚挂载（用于"已挂载但 messages.length 增长"才是新消息；
+  // "刚挂载 + messages 已经有很多"是路由切换恢复，不算新消息）
+  const mountedRef = useRef(false)
 
   // 只在消息数量增加时自动滚动（切换对话/加载历史不触发）
   useEffect(() => {
-    if (messages.length > prevLenRef.current) {
+    if (mountedRef.current && messages.length > prevLenRef.current) {
       bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
+    mountedRef.current = true
     prevLenRef.current = messages.length
   }, [messages.length])
 

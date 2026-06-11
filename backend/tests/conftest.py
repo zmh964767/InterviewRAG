@@ -10,6 +10,7 @@ from app.models.database import Database
 import app.core.db as db_module
 from app.api import deps as deps_mod
 from app.api import ingest as ingest_mod
+from app.api import admin_ingest as admin_ingest_mod
 
 # CI 没有 .env 文件,确保 RAGService 初始化时不会因缺少 API key 崩溃
 os.environ.setdefault("ZHIPU_API_KEY", "test-key-for-ci")
@@ -73,6 +74,7 @@ def _isolate_db(tmp_path):
     tmp_db = tmp_path / "test.db"
     original_db = db_module._db
     original_ingest = ingest_mod._ingest_service
+    original_admin_ingest = admin_ingest_mod._ingest_service
 
     db = Database.__new__(Database)
     conn = sqlite3.connect(str(tmp_db), check_same_thread=False)
@@ -82,13 +84,15 @@ def _isolate_db(tmp_path):
     db._init_tables()
     db_module.set_db(db)
 
-    ingest_mod._ingest_service = None  # 重置单例
+    ingest_mod._ingest_service = None
+    admin_ingest_mod._ingest_service = None  # 重置单例
 
     yield db
 
     conn.close()
     db_module._db = original_db
     ingest_mod._ingest_service = original_ingest
+    admin_ingest_mod._ingest_service = original_admin_ingest
 
 
 @pytest.fixture

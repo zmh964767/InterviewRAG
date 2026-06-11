@@ -1,9 +1,9 @@
 """知识库管理 API 集成测试
 
 覆盖：
-- GET /api/questions（列表 + 过滤 + 分页）
-- DELETE /api/questions/{id}（双写一致性）
-- POST /api/ingest/insert-one（撤销机制 + content_hash 冲突）
+- GET /api/questions（公开列表 + 过滤 + 分页）
+- DELETE /api/admin/questions/{id}（双写一致性，JWT 保护）
+- POST /api/admin/ingest/insert-one（撤销机制 + content_hash 冲突）
 """
 
 import pytest
@@ -11,13 +11,25 @@ import pytest
 from app.api import deps as deps_mod
 
 
+@pytest.fixture
+def admin_token(client):
+    res = client.post("/api/auth/login", json={"password": "admin123"})
+    assert res.status_code == 200
+    return res.json()["access_token"]
+
+
+@pytest.fixture
+def admin_headers(admin_token):
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
 # =========================================================================
-# GET /api/questions
+# GET /api/questions (public)
 # =========================================================================
 
 
 class TestListQuestionsAPI:
-    """GET /api/questions — 分页 + 过滤"""
+    """GET /api/questions — 分页 + 过滤（公开）"""
 
     def test_empty_returns_empty(self, client):
         res = client.get("/api/questions")
@@ -41,7 +53,6 @@ class TestListQuestionsAPI:
         assert res.status_code == 422
 
     def test_filters_propagate(self, client):
-        # 通过 client 先插入数据需要直接调 Database，这里简化：仅验证 query 接受参数
         res = client.get(
             "/api/questions?q=test&category=前端&difficulty=中等"
         )
@@ -51,19 +62,23 @@ class TestListQuestionsAPI:
 
 
 # =========================================================================
-# DELETE /api/questions/{id}
+# DELETE /api/admin/questions/{id} (protected)
 # =========================================================================
 
 
 class TestDeleteQuestionAPI:
-    """DELETE /api/questions/{id} — 双写一致性"""
+    """DELETE /api/admin/questions/{id} — 双写一致性"""
 
-    def test_delete_nonexistent_returns_404(self, client):
-        res = client.delete("/api/questions/nonexistent")
+    def test_delete_requires_auth(self, client):
+        res = client.delete("/api/admin/questions/nonexistent")
+        assert res.status_code == 401
+
+    def test_delete_nonexistent_returns_404(self, client, admin_headers):
+        res = client.delete("/api/admin/questions/nonexistent", headers=admin_headers)
         assert res.status_code == 404
         assert "未找到" in res.json()["detail"]
 
-    def test_delete_calls_chromadb_first(self, client):
+    def test_delete_calls_chromadb_first(self, client, admin_headers):
         """ChromaDB 失败时不删 SQLite"""
 
         class _RaisingVS:
@@ -77,25 +92,29 @@ class TestDeleteQuestionAPI:
 
         app.dependency_overrides[deps_mod.get_rag_service] = lambda: _RaisingRAG()
         try:
-            res = client.delete("/api/questions/anyid")
+            res = client.delete("/api/admin/questions/anyid", headers=admin_headers)
             assert res.status_code == 500
         finally:
             app.dependency_overrides.pop(deps_mod.get_rag_service, None)
 
 
 # =========================================================================
-# POST /api/ingest/insert-one
+# POST /api/admin/ingest/insert-one (protected)
 # =========================================================================
 
 
 class TestInsertOneAPI:
-    """POST /api/ingest/insert-one — 撤销机制"""
+    """POST /api/admin/ingest/insert-one — 撤销机制"""
 
-    def test_missing_fields(self, client):
-        res = client.post("/api/ingest/insert-one", json={})
+    def test_requires_auth(self, client):
+        res = client.post("/api/admin/ingest/insert-one", json={})
+        assert res.status_code == 401
+
+    def test_missing_fields(self, client, admin_headers):
+        res = client.post("/api/admin/ingest/insert-one", json={}, headers=admin_headers)
         assert res.status_code == 422
 
-    def test_duplicate_returns_409(self, client):
+    def test_duplicate_returns_409(self, client, admin_headers):
         payload = {
             "question": "Q?",
             "answer": "A.",
@@ -103,16 +122,14 @@ class TestInsertOneAPI:
             "difficulty": "中等",
             "source": "test",
         }
-        # 第一次插入
-        res1 = client.post("/api/ingest/insert-one", json=payload)
+        res1 = client.post("/api/admin/ingest/insert-one", json=payload, headers=admin_headers)
         assert res1.status_code == 201
 
-        # 第二次相同 content_hash → 409
-        res2 = client.post("/api/ingest/insert-one", json=payload)
+        res2 = client.post("/api/admin/ingest/insert-one", json=payload, headers=admin_headers)
         assert res2.status_code == 409
         assert "已存在" in res2.json()["detail"]
 
-    def test_stable_id(self, client):
+    def test_stable_id(self, client, admin_headers):
         payload = {
             "question": "测试 ID",
             "answer": "测试答案",
@@ -120,10 +137,9 @@ class TestInsertOneAPI:
             "difficulty": "简单",
             "source": "test",
         }
-        res = client.post("/api/ingest/insert-one", json=payload)
+        res = client.post("/api/admin/ingest/insert-one", json=payload, headers=admin_headers)
         assert res.status_code == 201
         body = res.json()
-        # id 应该是 md5(question|answer) 前 16 字符
         import hashlib
 
         expected = hashlib.md5(f"测试 ID|测试答案".encode()).hexdigest()[:16]

@@ -5,7 +5,7 @@ import type { Question } from '@/lib/types'
 interface QuestionDetailProps {
   question: Question | null
   onClose: () => void
-  onDelete: (q: Question) => void
+  onDelete?: (q: Question) => void
 }
 
 function formatTime(iso: string): string {
@@ -49,13 +49,15 @@ export function QuestionDetail({ question, onClose, onDelete }: QuestionDetailPr
             ← 返回
           </button>
           <div className="flex gap-2">
-            <button
-              onClick={() => onDelete(question)}
-              className="text-sm px-3 py-1.5 rounded-lg transition-colors"
-              style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
-            >
-              删除
-            </button>
+            {onDelete && question && (
+              <button
+                onClick={() => onDelete(question)}
+                className="text-sm px-3 py-1.5 rounded-lg transition-colors"
+                style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
+              >
+                删除
+              </button>
+            )}
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg transition-colors"

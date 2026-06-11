@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     # CORS（逗号分隔的域名列表，如 "http://localhost:3000,https://example.com"）
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # 管理员认证
+    admin_password: str = "admin123"
+    jwt_secret_key: str = ""  # 空值时由 app.auth 模块启动时自动生成
+    jwt_algorithm: str = "HS256"
+    jwt_expire_minutes: int = 1440  # 24 小时
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

@@ -4,6 +4,9 @@
 - 正常流式完成 → 数据帧 + done 信号 + history 保存
 - CancelledError → partial answer 保存到 conversations
 - 异常 → error SSE 帧 yield
+
+注：rag_service.query_stream 现在是 coroutine（用 await 获取 _StreamWithSources），
+    所以 mock 用 AsyncMock(return_value=gen) 模拟 `await query_stream(...)` 的结果。
 """
 
 import asyncio
@@ -16,6 +19,20 @@ from app.api.query import stream_generator, conversations
 
 
 # ---- helpers ----
+
+class FakeRequest:
+    """模拟 FastAPI Request：永不 disconnect（用于测试正常完成路径）"""
+    async def is_disconnected(self) -> bool:
+        return False
+
+
+class DisconnectingRequest:
+    """模拟 FastAPI Request：返回 True 模拟 client 断开"""
+    def __init__(self):
+        self.call_count = 0
+    async def is_disconnected(self) -> bool:
+        self.call_count += 1
+        return self.call_count >= 2  # 第 2 次检查时返回 True（第一个 yield 之后）
 
 def _make_question():
     return {"question": "测试问题", "chat_history": [], "stream": True}
@@ -52,13 +69,13 @@ class TestStreamGeneratorNormal:
             {"id": "s1", "question": "q1", "score": 0.9, "category": "LLM"},
         ])
         rag_service = MagicMock()
-        rag_service.query_stream.return_value = gen
+        rag_service.query_stream = AsyncMock(return_value=gen)
 
         history = []
         conv_id = "conv-test-1"
 
         results = []
-        async for frame in stream_generator(rag_service, "测试问题", history, conv_id):
+        async for frame in stream_generator(rag_service, "测试问题", history, conv_id, FakeRequest()):
             results.append(frame)
 
         # 应有 2 个 data chunk + 1 个 done = 3 帧
@@ -79,10 +96,10 @@ class TestStreamGeneratorNormal:
         """正常完成时 history 应追加 Q&A 对"""
         gen = FakeStreamGen(chunks=["答案"])
         rag_service = MagicMock()
-        rag_service.query_stream.return_value = gen
+        rag_service.query_stream = AsyncMock(return_value=gen)
 
         history = []
-        async for _ in stream_generator(rag_service, "Q", history, "c1"):
+        async for _ in stream_generator(rag_service, "Q", history, "c1", FakeRequest()):
             pass
 
         assert history == [
@@ -95,10 +112,10 @@ class TestStreamGeneratorNormal:
         """正常完成时 conversations[conv_id] 应被更新"""
         gen = FakeStreamGen(chunks=["ok"])
         rag_service = MagicMock()
-        rag_service.query_stream.return_value = gen
+        rag_service.query_stream = AsyncMock(return_value=gen)
 
         history = []
-        async for _ in stream_generator(rag_service, "Q", history, "c2"):
+        async for _ in stream_generator(rag_service, "Q", history, "c2", FakeRequest()):
             pass
 
         assert "c2" in conversations
@@ -117,14 +134,14 @@ class TestStreamGeneratorCancelledError:
             raise asyncio.CancelledError()
 
         rag_service = MagicMock()
-        rag_service.query_stream.return_value = gen_that_cancels()
+        rag_service.query_stream = AsyncMock(return_value=gen_that_cancels())
 
         history = []
         conv_id = "cancelled-1"
 
         # stream_generator 吞掉 CancelledError，不 raise
         results = []
-        async for frame in stream_generator(rag_service, "Q", history, conv_id):
+        async for frame in stream_generator(rag_service, "Q", history, conv_id, FakeRequest()):
             results.append(frame)
 
         # 只有 1 个 data chunk（partial），没有 done 帧
@@ -150,11 +167,11 @@ class TestStreamGeneratorException:
             raise ValueError("LLM 服务挂了")
 
         rag_service = MagicMock()
-        rag_service.query_stream.return_value = gen_that_errors()
+        rag_service.query_stream = AsyncMock(return_value=gen_that_errors())
 
         history = []
         results = []
-        async for frame in stream_generator(rag_service, "Q", history, "e1"):
+        async for frame in stream_generator(rag_service, "Q", history, "e1", FakeRequest()):
             results.append(frame)
 
         # data chunk + error 帧
@@ -170,10 +187,45 @@ class TestStreamGeneratorException:
             raise RuntimeError("boom")
 
         rag_service = MagicMock()
-        rag_service.query_stream.return_value = gen_that_errors()
+        rag_service.query_stream = AsyncMock(return_value=gen_that_errors())
 
         history = []
-        async for _ in stream_generator(rag_service, "Q", history, "e2"):
+        async for _ in stream_generator(rag_service, "Q", history, "e2", FakeRequest()):
             pass
 
         assert len(history) == 0
+
+
+class TestStreamGeneratorClientDisconnect:
+    """客户端断开（用户在流式中途切走/关闭页面）"""
+
+    @pytest.mark.asyncio
+    async def test_disconnect_stops_stream_and_saves_partial(self):
+        """第一次 yield 后客户端断开 → 立即退出流，partial 保存"""
+        # 模拟：yield 多个 chunk，让 disconnect 在第 2 次 yield 之前触发
+        async def gen_long():
+            for c in ['chunk1', 'chunk2', 'chunk3', 'chunk4']:
+                yield c
+
+        rag_service = MagicMock()
+        rag_service.query_stream = AsyncMock(return_value=gen_long())
+
+        history = []
+        conv_id = "disconnect-1"
+
+        results = []
+        async for frame in stream_generator(rag_service, "Q", history, conv_id, DisconnectingRequest()):
+            results.append(frame)
+
+        # 只 yield 了 1 个 chunk（disconnectRequest 在第一次 yield 后断开，
+        # 下一次循环开始时 is_disconnected() 返回 True）
+        # 实际行为：chunk1 已 yield，下次循环 is_disconnected()=True → return
+        # 所以结果是 1 个 data frame
+        assert len(results) == 1
+
+        # partial 保存到 history（带 …）
+        assert history[1]["content"].endswith("…")
+        assert "chunk1" in history[1]["content"]
+
+        # conversations 更新
+        assert conv_id in conversations

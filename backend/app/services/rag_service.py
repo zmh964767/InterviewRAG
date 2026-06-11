@@ -20,15 +20,18 @@ logger = logging.getLogger(__name__)
 
 
 class _StreamWithSources:
-    """包装 async generator，附加 sources 属性供调用方读取。"""
+    """包装 async generator + 附加 sources 属性供调用方读取。
 
-    def __init__(self, gen: AsyncGenerator[str, None], sources: list[dict]):
-        self._gen = gen
+    `__aiter__` 返回底层 chat_stream async iterator（不是 async 方法），
+    这是修复 stream=true 报 "got coroutine" 错误的关键。
+    """
+
+    def __init__(self, sources: list[dict], inner: AsyncGenerator[str, None]):
         self.sources = sources
+        self._inner = inner
 
-    async def __aiter__(self):
-        async for chunk in self._gen:
-            yield chunk
+    def __aiter__(self) -> AsyncGenerator[str, None]:
+        return self._inner
 
 # 系统提示
 SYSTEM_PROMPT = """你是一个专业的面试助手。你的任务是根据提供的参考资料回答用户的面试问题。
@@ -123,11 +126,14 @@ class RAGService:
         self,
         question: str,
         chat_history: list[dict] | None = None,
-    ) -> AsyncGenerator[str, None]:
-        """问答（流式返回，同时检索前置）
+    ) -> "_StreamWithSources":
+        """问答（流式返回，检索前置）
 
-        返回 _StreamWithSources 对象，迭代时 yield chunk，sources 属性存检索结果。
-        调用方在 async for 消费完后可读 gen.sources 获取来源引用，无实例属性竞争。
+        本方法是 coroutine（不是 async generator）：
+        - 调用方 `gen = await query_stream(...)` 拿到 `_StreamWithSources` 对象
+        - `async for chunk in gen` 消费 LLM 流
+        - `gen.sources` 读取来源引用（无实例属性竞争：sources 挂在 gen 上，
+          不同请求各持自己的 gen，互不干扰）
         """
         sources = await self._retrieve(question)
         top_sources = sources[: self.settings.rerank_top_k]
@@ -135,11 +141,12 @@ class RAGService:
         context = self._build_context(top_sources)
         messages = self._build_messages(question, context, chat_history)
 
-        async def _stream():
+        # 内部 async generator：转发 LLM 流（_StreamWithSources.__aiter__ 直接返回它）
+        async def _inner() -> AsyncGenerator[str, None]:
             async for chunk in self.llm_service.chat_stream(messages):
                 yield chunk
 
-        return _StreamWithSources(_stream(), top_sources)
+        return _StreamWithSources(top_sources, _inner())
 
     def _process_results(self, raw_results: list[dict]) -> list[dict]:
         """处理检索结果（来自 HybridRetriever）"""

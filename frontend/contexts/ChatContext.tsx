@@ -300,6 +300,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (err) {
+        // 区分 abort（用户主动切走）和真实错误
+        const isAbort = err instanceof Error && (
+          err.name === 'AbortError' ||
+          abortRef.current?.signal.aborted
+        )
+        if (isAbort) {
+          // 预期中止：partial 内容已被 mergePartialIntoConversation 增量写入
+          // （每次 event.content 都会写回），不需要拼错误信息
+          return
+        }
         const errMsg = err instanceof Error ? err.message : '未知'
         const errored: StreamPartial = {
           ...(partialRef.current ?? initial),

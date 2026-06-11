@@ -1,13 +1,12 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import type { StatsResponse } from '@/lib/types'
 import type { Conversation } from '@/hooks/useConversations'
 
 interface SidebarProps {
   isOpen: boolean
   onToggle: () => void
-  stats: StatsResponse | null
+  stats?: unknown  // 保留传参能力但当前不再使用
   conversations: Conversation[]
   currentId: string | null
   onCreateConversation: () => void
@@ -15,25 +14,22 @@ interface SidebarProps {
   onDeleteConversation: (id: string) => void
 }
 
-type Tab = 'conversations' | 'knowledge' | 'eval'
+type Tab = 'conversations' | 'questions'
 
 export function Sidebar({
-  isOpen, onToggle, stats,
+  isOpen, onToggle,
   conversations, currentId,
   onCreateConversation, onSwitchConversation, onDeleteConversation,
 }: SidebarProps) {
   const router = useRouter()
   const pathname = usePathname()
-  // 根据 pathname 判断当前 Tab
-  const activeTab: Tab = pathname?.startsWith('/kb') ? 'knowledge' : pathname?.startsWith('/eval') ? 'eval' : 'conversations'
+  const activeTab: Tab = pathname?.startsWith('/questions') ? 'questions' : 'conversations'
 
   const handleTabClick = (tab: Tab) => {
     if (tab === 'conversations') {
       router.push('/')
-    } else if (tab === 'knowledge') {
-      router.push('/kb')
-    } else if (tab === 'eval') {
-      router.push('/eval')
+    } else if (tab === 'questions') {
+      router.push('/questions')
     }
   }
 
@@ -92,7 +88,7 @@ export function Sidebar({
 
         {/* Tabs */}
         <div className="px-4 flex gap-1 mb-2">
-          {(['conversations', 'knowledge', 'eval'] as Tab[]).map((tab) => (
+          {(['conversations', 'questions'] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => handleTabClick(tab)}
@@ -103,20 +99,13 @@ export function Sidebar({
                 border: activeTab === tab ? '1px solid var(--border-subtle)' : '1px solid transparent',
               }}
             >
-              {tab === 'conversations' ? '对话' : tab === 'knowledge' ? '知识库' : '评估'}
+              {tab === 'conversations' ? '对话' : '题目库'}
             </button>
           ))}
         </div>
 
         {/* Tab Content */}
-        {activeTab === 'eval' ? (
-          /* Eval Tab — 无 Sidebar 内容，页面自身 fetch 数据 */
-          <div className="flex-1 overflow-y-auto px-4">
-            <div className="text-center py-8">
-              <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>评估数据在右侧页面展示</p>
-            </div>
-          </div>
-        ) : activeTab === 'conversations' ? (
+        {activeTab === 'conversations' ? (
           /* Conversation List */
           <div className="flex-1 overflow-y-auto px-3">
             {conversations.length === 0 ? (
@@ -167,52 +156,11 @@ export function Sidebar({
             )}
           </div>
         ) : (
-          /* Knowledge Base Tab */
+          /* Questions Tab — 在 /questions 页面展示，侧边栏仅提示 */
           <div className="flex-1 overflow-y-auto px-4">
-            {stats ? (
-              <>
-                {/* Stats */}
-                <div className="p-4 rounded-xl mb-4" style={{ background: 'var(--cream)', border: '1px solid var(--border-subtle)' }}>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-2xl font-light" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-                        {stats.total_questions}
-                      </div>
-                      <div className="text-xs" style={{ color: 'var(--ink-muted)' }}>题目</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-light" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-                        {Object.keys(stats.categories).length}
-                      </div>
-                      <div className="text-xs" style={{ color: 'var(--ink-muted)' }}>分类</div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Categories */}
-                <p className="text-xs font-medium uppercase tracking-widest mb-3" style={{ color: 'var(--ink-muted)', letterSpacing: '0.1em' }}>
-                  分类
-                </p>
-                <div className="space-y-0.5">
-                  {Object.entries(stats.categories).map(([category, count]) => (
-                    <div
-                      key={category}
-                      className="flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors"
-                      style={{ color: 'var(--ink-light)' }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--cream)' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
-                    >
-                      <span className="text-sm truncate">{category}</span>
-                      <span className="text-xs tabular-nums" style={{ color: 'var(--ink-muted)' }}>{count}</span>
-                    </div>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="text-center py-8">
-                <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>加载中...</p>
-              </div>
-            )}
+            <div className="text-center py-8">
+              <p className="text-xs" style={{ color: 'var(--ink-muted)' }}>题目列表在右侧页面展示</p>
+            </div>
           </div>
         )}
 

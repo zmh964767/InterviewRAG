@@ -1,6 +1,7 @@
 """FastAPI 应用入口"""
 
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -12,8 +13,9 @@ from app.core import db as db_module
 from app.core.exceptions import AppError
 from app.models.database import Database
 from app.services.rag_service import RAGService
-from app.api import query, ingest, health, stats, questions
-from app.api import eval as eval_router
+from app.api import query, health, questions_public
+from app.api import auth
+from app.api import admin
 
 # 日志配置
 logging.basicConfig(
@@ -26,8 +28,6 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理：统一初始化 / 清理所有共享实例"""
-    import os
-
     # 设置 HuggingFace 国内镜像（Re-ranker 模型下载）
     if not os.environ.get("HF_ENDPOINT"):
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
@@ -65,12 +65,11 @@ app.add_middleware(
 )
 
 # 注册路由
+app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(query.router, prefix="/api", tags=["query"])
-app.include_router(ingest.router, prefix="/api", tags=["ingest"])
-app.include_router(questions.router, prefix="/api", tags=["questions"])
+app.include_router(questions_public.router, prefix="/api", tags=["questions"])
 app.include_router(health.router, prefix="/api", tags=["health"])
-app.include_router(stats.router, prefix="/api", tags=["stats"])
-app.include_router(eval_router.router)
+app.include_router(admin.router)  # /api/admin/* — JWT 保护
 
 
 @app.exception_handler(AppError)

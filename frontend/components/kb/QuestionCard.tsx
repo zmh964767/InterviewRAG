@@ -5,7 +5,7 @@ import type { Question } from '@/lib/types'
 interface QuestionCardProps {
   question: Question
   onSelect: (q: Question) => void
-  onDelete: (q: Question) => void
+  onDelete?: (q: Question) => void
 }
 
 function formatTime(iso: string): string {
@@ -37,15 +37,17 @@ export function QuestionCard({ question, onSelect, onDelete }: QuestionCardProps
       <div className="text-xs line-clamp-2" style={{ color: 'var(--ink-muted)' }}>
         {question.answer}
       </div>
-      <div className="flex justify-end mt-2">
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(question) }}
-          className="text-xs px-3 py-1 rounded transition-colors"
-          style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
-        >
-          删除
-        </button>
-      </div>
+      {onDelete && (
+        <div className="flex justify-end mt-2">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(question) }}
+            className="text-xs px-3 py-1 rounded transition-colors"
+            style={{ color: 'var(--accent)', border: '1px solid var(--accent)' }}
+          >
+            删除
+          </button>
+        </div>
+      )}
     </div>
   )
 }
