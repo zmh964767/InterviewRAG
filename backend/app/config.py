@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     multi_query_enabled: bool = True   # kill switch：False 时退化为单路混合检索
     multi_query_n: int = 3             # 改写变体数（含原 query 共 N 个）
     multi_query_timeout_s: float = 5.0  # 改写 LLM 超时；超时回退原 query
+    query_rewrite_prompt_variant: int = 1  # Prompt 变体 1..5（见 prompts/query_rewrite_v*.txt）
 
     # LLM 参数
     llm_model: str = "glm-4-flash"

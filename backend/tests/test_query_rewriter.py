@@ -107,3 +107,66 @@ def test_arewrite_is_async_entry(rewriter, mock_llm):
     result = asyncio.run(rewriter.arewrite("TCP 三次握手"))
     assert result == ["TCP 三次握手", "变体一", "变体二"]
     mock_llm.chat.assert_called_once()
+
+
+# =========================================================================
+# prompt_variant 测试
+# =========================================================================
+
+
+def test_variant_1_uses_default_temperature(mock_llm):
+    """variant=1: 温度 0.3"""
+    mock_llm.chat.return_value = "变体一"
+    rw = QueryRewriter(mock_llm, n=3, timeout_s=5.0, prompt_variant=1)
+    rw.rewrite("Q")
+    call_args = mock_llm.chat.call_args
+    assert call_args.kwargs.get("temperature", call_args[1].get("temperature", None)) == 0.3
+
+
+def test_variant_4_uses_high_temperature(mock_llm):
+    """variant=4: 温度 0.7（鼓励多样性）"""
+    mock_llm.chat.return_value = "变体一"
+    rw = QueryRewriter(mock_llm, n=3, timeout_s=5.0, prompt_variant=4)
+    rw.rewrite("Q")
+    call_args = mock_llm.chat.call_args
+    assert call_args.kwargs.get("temperature", call_args[1].get("temperature", None)) == 0.7
+
+
+def test_variant_5_uses_moderate_temperature(mock_llm):
+    """variant=5: 温度 0.5"""
+    mock_llm.chat.return_value = "变体一"
+    rw = QueryRewriter(mock_llm, n=3, timeout_s=5.0, prompt_variant=5)
+    rw.rewrite("Q")
+    call_args = mock_llm.chat.call_args
+    assert call_args.kwargs.get("temperature", call_args[1].get("temperature", None)) == 0.5
+
+
+def test_variant_unknown_falls_back_to_v1(mock_llm):
+    """未知 variant：回退 v1，不报错"""
+    mock_llm.chat.return_value = "变体一"
+    rw = QueryRewriter(mock_llm, n=3, timeout_s=5.0, prompt_variant=99)
+    result = rw.rewrite("Q")
+    assert rw.prompt_variant == 1
+    assert result[0] == "Q"
+
+
+def test_variant_2_prompt_includes_technical_terms(mock_llm):
+    """variant=2 prompt 包含技术术语保留约束"""
+    mock_llm.chat.return_value = "变体一"
+    rw = QueryRewriter(mock_llm, n=3, timeout_s=5.0, prompt_variant=2)
+    assert "技术术语" in rw.prompt_template or "技术名称" in rw.prompt_template or "技术" in rw.prompt_template
+
+
+def test_variant_3_prompt_includes_examples(mock_llm):
+    """variant=3 few-shot prompt 包含示例"""
+    mock_llm.chat.return_value = "变体一"
+    rw = QueryRewriter(mock_llm, n=3, timeout_s=5.0, prompt_variant=3)
+    assert "TCP" in rw.prompt_template  # few-shot 里有 TCP 三次握手示例
+
+
+def test_variant_prompt_file_all_exist():
+    """5 个 variant 的 prompt 文件都存在"""
+    from app.retrievers.query_rewriter import _PROMPTS_DIR, _PROMPT_FILES
+    for v, filename in _PROMPT_FILES.items():
+        path = _PROMPTS_DIR / filename
+        assert path.exists(), f"variant {v} prompt file missing: {path}"

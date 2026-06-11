@@ -265,6 +265,7 @@ async def run_comparison_evaluation(items: list[dict]) -> dict:
         llm_service,
         n=settings.multi_query_n,
         timeout_s=settings.multi_query_timeout_s,
+        prompt_variant=settings.query_rewrite_prompt_variant,
     )
     multi_query_retriever = MultiQueryRetriever(
         hybrid_retriever,

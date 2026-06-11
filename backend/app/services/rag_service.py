@@ -64,6 +64,7 @@ class RAGService:
             self.llm_service,
             n=self.settings.multi_query_n,
             timeout_s=self.settings.multi_query_timeout_s,
+            prompt_variant=self.settings.query_rewrite_prompt_variant,
         )
         self.multi_query_retriever = MultiQueryRetriever(
             self.hybrid_retriever,

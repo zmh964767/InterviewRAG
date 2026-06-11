@@ -43,6 +43,9 @@ backend/coverage.xml
 frontend/coverage/
 htmlcov/
 
+# Sweep 调优结果（本地实验产物，不公开）
+backend/evaluation/results/sweep/
+
 # OS
 .DS_Store
 Thumbs.db

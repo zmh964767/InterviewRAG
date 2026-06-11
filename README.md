@@ -158,6 +158,29 @@ npm run lint      # ESLint 检查（0 warnings / errors）
 - `GET /api/health` — 健康检查
 - `GET /api/stats` — 知识库统计
 
+## 🔧 调优记录
+
+### 检索链路调优（2026-06-11）
+
+通过**单变量 sweep**（5 Prompt 变体 + 4 Chunk size）调优 strategy E（多路改写 + 混合检索）的 HR@5。
+
+**运行 sweep**：
+```bash
+cd backend
+python -m evaluation.sweep
+```
+
+**Prompt 变体**（5 个，见 `backend/app/retrievers/prompts/query_rewrite_v*.txt`）：
+- v1: 基线（现状）
+- v2: 面试特化（保留技术术语）
+- v3: few-shot（示例引导）
+- v4: 高温度 0.7（鼓励多样性）
+- v5: 极简约束（自由泛化）
+
+**Chunk size**（4 个）：200 / 500 / 800 / 1200，overlap 固定 10%
+
+**结果存放**：`backend/evaluation/results/sweep/`（本地，不提交 git）
+
 ## License
 
 MIT
