@@ -9,6 +9,8 @@ from collections.abc import AsyncGenerator
 from app.config import get_settings
 from app.core.vectorstore import VectorStore
 from app.retrievers.hybrid_retriever import HybridRetriever
+from app.retrievers.multi_query_retriever import MultiQueryRetriever
+from app.retrievers.query_rewriter import QueryRewriter
 from app.rerankers.bge_reranker import BGEReranker
 from app.services.llm_service import LLMService
 from app.services.embed_service import EmbedService
@@ -57,6 +59,48 @@ class RAGService:
         self.llm_service = LLMService()
         self.embed_service = EmbedService()
 
+        # 多路改写：rewriter 永远建（让 multi 拿到），multi_query_enabled 是 kill switch
+        self.rewriter = QueryRewriter(
+            self.llm_service,
+            n=self.settings.multi_query_n,
+            timeout_s=self.settings.multi_query_timeout_s,
+        )
+        self.multi_query_retriever = MultiQueryRetriever(
+            self.hybrid_retriever,
+            n=self.settings.multi_query_n,
+            top_k=self.settings.retrieval_top_k,
+        )
+        self.multi_query_retriever.set_rewriter(self.rewriter)
+
+    async def _retrieve(self, question: str) -> list[dict]:
+        """统一检索入口：multi_query_enabled 时走多路，否则走单路混合检索。
+
+        返回的是处理后的 sources（dict 形态，含 id/question/answer/score）。
+        在 async 上下文里直接 await，避免嵌套 event loop。
+        """
+        if self.settings.multi_query_enabled:
+            raw = await self.multi_query_retriever.aretrieve(
+                query=question, top_k=self.settings.retrieval_top_k
+            )
+        else:
+            # 单路走线程池（hybrid.retrieve 是同步阻塞）
+            import asyncio
+            loop = asyncio.get_event_loop()
+            raw = await loop.run_in_executor(
+                None,
+                lambda: self.hybrid_retriever.retrieve(
+                    query=question, top_k=self.settings.retrieval_top_k
+                ),
+            )
+        sources = self._process_results(raw)
+        if self.reranker.is_available() and sources:
+            sources = self.reranker.rerank(
+                query=question,
+                documents=sources,
+                top_k=self.settings.rerank_top_k,
+            )
+        return sources
+
     async def query(
         self,
         question: str,
@@ -66,30 +110,13 @@ class RAGService:
         import asyncio
         loop = asyncio.get_event_loop()
 
-        # 直接使用原始问题
-        rewritten = question
+        # 检索（多路改写 → 合并 → re-rank）
+        sources = await self._retrieve(question)
 
-        # 2-3. 混合检索 + Re-ranking（在线程池中运行）
-        def _retrieve_and_rerank():
-            retrieved = self.hybrid_retriever.retrieve(
-                query=rewritten,
-                top_k=self.settings.retrieval_top_k,
-            )
-            sources = self._process_results(retrieved)
-            if self.reranker.is_available() and sources:
-                sources = self.reranker.rerank(
-                    query=rewritten,
-                    documents=sources,
-                    top_k=self.settings.rerank_top_k,
-                )
-            return sources
-
-        sources = await loop.run_in_executor(None, _retrieve_and_rerank)
-
-        # 4. 构建上下文
+        # 构建上下文
         context = self._build_context(sources[: self.settings.rerank_top_k])
 
-        # 5. 构建消息
+        # 构建消息
         messages = self._build_messages(question, context, chat_history)
 
         # 6. LLM 生成（在线程池中运行避免阻塞事件循环）
@@ -116,25 +143,9 @@ class RAGService:
         """
         import asyncio
 
-        rewritten = question
-
         loop = asyncio.get_event_loop()
 
-        def _retrieve_and_rerank():
-            retrieved = self.hybrid_retriever.retrieve(
-                query=rewritten,
-                top_k=self.settings.retrieval_top_k,
-            )
-            sources = self._process_results(retrieved)
-            if self.reranker.is_available() and sources:
-                sources = self.reranker.rerank(
-                    query=rewritten,
-                    documents=sources,
-                    top_k=self.settings.rerank_top_k,
-                )
-            return sources
-
-        sources = await loop.run_in_executor(None, _retrieve_and_rerank)
+        sources = await self._retrieve(question)
         top_sources = sources[: self.settings.rerank_top_k]
 
         context = self._build_context(top_sources)
@@ -147,7 +158,12 @@ class RAGService:
         return _StreamWithSources(_stream(), top_sources)
 
     async def _rewrite_query(self, question: str) -> str:
-        """用 LLM 改写查询（在线程池中运行避免阻塞事件循环）"""
+        """用 LLM 改写查询（在线程池中运行避免阻塞事件循环）
+
+        .. deprecated::
+            已被 QueryRewriter + MultiQueryRetriever 取代。保留仅为兼容旧单测，
+            新代码请使用 self.rewriter.rewrite() 获取多路变体。
+        """
         import asyncio
         try:
             prompt = REWRITE_PROMPT.format(question=question)

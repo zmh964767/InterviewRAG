@@ -1,10 +1,11 @@
 """对比实验
 
-对比四种检索策略的效果：
+对比五种检索策略的效果：
 - 方案 A：纯向量检索（baseline）
 - 方案 B：混合检索（向量 + BM25）
 - 方案 C：混合检索 + Re-ranking
 - 方案 D：小块检索 + 大块生成
+- 方案 E：多路 Query 改写 + 混合检索
 """
 
 import asyncio
@@ -26,15 +27,34 @@ async def run_comparison():
     eval_items = [item for item in eval_data if item["type"] != "irrelevant"]
 
     # 2. 初始化组件
+    from app.config import get_settings
     from app.core.vectorstore import VectorStore
     from app.retrievers.hybrid_retriever import HybridRetriever
+    from app.retrievers.multi_query_retriever import MultiQueryRetriever
+    from app.retrievers.query_rewriter import QueryRewriter
     from app.retrievers.small_to_big import SmallToBigRetriever
     from app.rerankers.bge_reranker import BGEReranker
+    from app.services.llm_service import LLMService
 
+    settings = get_settings()
     vector_store = VectorStore()
     hybrid_retriever = HybridRetriever(vector_store)
     s2b_retriever = SmallToBigRetriever(vector_store)
     reranker = BGEReranker()
+    llm_service = LLMService()
+
+    # 方案 E：多路改写 + 混合检索（共享 rewriter 与 multi retriever）
+    rewriter = QueryRewriter(
+        llm_service,
+        n=settings.multi_query_n,
+        timeout_s=settings.multi_query_timeout_s,
+    )
+    multi_query_retriever = MultiQueryRetriever(
+        hybrid_retriever,
+        n=settings.multi_query_n,
+        top_k=settings.retrieval_top_k,
+    )
+    multi_query_retriever.set_rewriter(rewriter)
 
     # 3. 定义四种方案
     async def plan_a(question: str) -> dict:
@@ -63,11 +83,20 @@ async def run_comparison():
         results = s2b_retriever.retrieve(query=question, top_k=5, n_candidates=20)
         return {"sources": results}
 
+    async def plan_e(question: str) -> dict:
+        """方案 E：多路 Query 改写 + 混合检索（去重合并）"""
+        # 改写：单次 LLM 调用，5s 超时回退
+        queries = rewriter.rewrite(question)
+        # 多路并发检索 + 去重合并
+        results = multi_query_retriever.retrieve_with_queries(queries, top_k=5)
+        return {"sources": results}
+
     plans = {
         "A_纯向量": plan_a,
         "B_混合检索": plan_b,
         "C_混合+Rerank": plan_c,
         "D_小块检索大块生成": plan_d,
+        "E_多路改写混合": plan_e,
     }
 
     # 4. 运行对比

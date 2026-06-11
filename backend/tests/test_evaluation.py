@@ -4,6 +4,9 @@
 含 @pytest.mark.eval 的测试需显式 -m eval（需 ZHIPU_API_KEY + ChromaDB）。
 """
 
+import asyncio
+from unittest.mock import Mock
+
 import pytest
 
 from evaluation.metrics import compute_retrieval_metrics, hit_rate_at_k, mrr, question_match
@@ -242,3 +245,73 @@ class TestReporter:
         assert "检索策略对比" in content
         assert "Hit Rate@5" in content
         assert "MRR" in content
+
+
+# =========================================================================
+# 多路改写 strategy E（mock LLM + mock hybrid，不打 API）
+# =========================================================================
+
+
+class TestPlanE:
+    """验证 comparison.py 新增的 plan_e 走通多路改写+混合检索链路。
+
+    注：comparison.py 用函数内 import 拉组件，单测直接 mock 顶层属性较脆。
+    这里用等价链路测试：rewriter + multi_query_retriever 端到端跑通。
+    """
+
+    def test_plan_e_equiv_pipeline(self):
+        """plan_e 等价链路：rewriter 改写 + multi 合并 → 返回 sources。"""
+        from app.retrievers.query_rewriter import QueryRewriter
+        from app.retrievers.multi_query_retriever import MultiQueryRetriever
+
+        # mock LLM 返回 3 个变体
+        mock_llm = Mock()
+        mock_llm.chat.return_value = "TCP 连接建立过程\n为什么需要三次握手\nTCP 三次握手机制"
+
+        rewriter = QueryRewriter(mock_llm, n=3, timeout_s=5.0)
+        queries = rewriter.rewrite("TCP 三次握手")
+        # 原 query 在第 0 位 + 3 变体 = 共 4 个
+        assert queries[0] == "TCP 三次握手"
+        assert len(queries) == 4
+
+        # mock hybrid 返回 2 个不同 doc（4 个 queries 各 1 路）
+        mock_hybrid = Mock()
+        mock_hybrid.retrieve.side_effect = [
+            [{"id": "q1", "text": "A", "rrf_score": 0.8}],
+            [{"id": "q2", "text": "B", "rrf_score": 0.7}],
+            [{"id": "q1", "text": "A", "rrf_score": 0.85}],  # q1 又命中
+            [{"id": "q2", "text": "B", "rrf_score": 0.75}],  # q2 又命中
+        ]
+
+        multi = MultiQueryRetriever(mock_hybrid, n=4, top_k=5)
+        results = multi.retrieve_with_queries(queries, top_k=5)
+        # q1 + q2 = 2 个 entry
+        assert len(results) == 2
+        ids = {d["id"] for d in results}
+        assert ids == {"q1", "q2"}
+        # q1 命中 2 路 → score 取 max (0.85) + matched_queries 累加
+        q1 = next(d for d in results if d["id"] == "q1")
+        assert q1["rrf_score"] == 0.85
+        assert len(q1["matched_queries"]) == 2
+
+    def test_plan_e_handles_rewriter_failure(self):
+        """plan_e: rewriter 失败时回退到原 query 单路，不抛异常。"""
+        from app.retrievers.query_rewriter import QueryRewriter
+        from app.retrievers.multi_query_retriever import MultiQueryRetriever
+
+        # mock LLM 抛异常 → rewriter 应回退 [query]
+        mock_llm = Mock()
+        mock_llm.chat.side_effect = Exception("智谱 API 挂了")
+        rewriter = QueryRewriter(mock_llm, n=3, timeout_s=1.0)
+        queries = rewriter.rewrite("TCP 三次握手")
+        # 失败回退到 [原 query] 单路
+        assert queries == ["TCP 三次握手"]
+
+        # multi 用单路也能跑
+        mock_hybrid = Mock()
+        mock_hybrid.retrieve.return_value = [
+            {"id": "q1", "text": "A", "rrf_score": 0.8}
+        ]
+        multi = MultiQueryRetriever(mock_hybrid, n=3, top_k=5)
+        results = multi.retrieve_with_queries(queries, top_k=5)
+        assert len(results) == 1

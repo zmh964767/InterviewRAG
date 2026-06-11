@@ -139,6 +139,9 @@ npm run lint      # ESLint 检查（0 warnings / errors）
 | B | 混合检索（向量+BM25） | 无 |
 | C | 混合检索 | BGE-Reranker |
 | D | 小块检索+大块生成 | 无 |
+| **E（新增）** | **多路 Query 改写 + 混合检索** | 无 |
+
+方案 E 用 LLM 把单条 query 改写成 3 个语义等价变体，**多路并发检索后按 chunk id 去重合并**（score 取 max），覆盖同义表达与口语化查询。失败/超时自动回退到单路混合检索。`SKIP_RERANKER=1` 仍生效。
 
 ## 📝 API 文档
 
