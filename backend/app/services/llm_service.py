@@ -55,7 +55,7 @@ class LLMService:
         import queue
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             q: queue.Queue = queue.Queue()
             sentinel = object()  # 结束标记
 

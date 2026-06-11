@@ -96,7 +96,7 @@ class QueryRewriter:
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": query},
             ]
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             raw = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,

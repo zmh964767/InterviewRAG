@@ -3,6 +3,7 @@
 负责将检索、Re-ranking、查询改写、LLM 生成串联起来。
 """
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 
@@ -38,15 +39,6 @@ SYSTEM_PROMPT = """你是一个专业的面试助手。你的任务是根据提�
 3. 回答要准确、简洁、有条理，使用 Markdown 格式
 4. 不要在回答中添加来源引用，系统会自动处理
 """
-
-# 查询改写提示
-REWRITE_PROMPT = """你是一个搜索查询优化器。用户的问题可能比较口语化或模糊。
-请将其改写为更适合检索的精确查询，保持原意但更具体。
-只输出改写后的查询，不要解释。
-
-用户问题：{question}
-改写后的查询："""
-
 
 class RAGService:
     """RAG 核心服务"""
@@ -85,8 +77,7 @@ class RAGService:
             )
         else:
             # 单路走线程池（hybrid.retrieve 是同步阻塞）
-            import asyncio
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             raw = await loop.run_in_executor(
                 None,
                 lambda: self.hybrid_retriever.retrieve(
@@ -108,9 +99,6 @@ class RAGService:
         chat_history: list[dict] | None = None,
     ) -> dict:
         """问答（普通返回）"""
-        import asyncio
-        loop = asyncio.get_event_loop()
-
         # 检索（多路改写 → 合并 → re-rank）
         sources = await self._retrieve(question)
 
@@ -120,9 +108,8 @@ class RAGService:
         # 构建消息
         messages = self._build_messages(question, context, chat_history)
 
-        # 6. LLM 生成（在线程池中运行避免阻塞事件循环）
-        import asyncio
-        loop = asyncio.get_event_loop()
+        # LLM 生成（在线程池中运行避免阻塞事件循环）
+        loop = asyncio.get_running_loop()
         answer = await loop.run_in_executor(
             None, lambda: self.llm_service.chat(messages)
         )
@@ -142,10 +129,6 @@ class RAGService:
         返回 _StreamWithSources 对象，迭代时 yield chunk，sources 属性存检索结果。
         调用方在 async for 消费完后可读 gen.sources 获取来源引用，无实例属性竞争。
         """
-        import asyncio
-
-        loop = asyncio.get_event_loop()
-
         sources = await self._retrieve(question)
         top_sources = sources[: self.settings.rerank_top_k]
 
@@ -157,26 +140,6 @@ class RAGService:
                 yield chunk
 
         return _StreamWithSources(_stream(), top_sources)
-
-    async def _rewrite_query(self, question: str) -> str:
-        """用 LLM 改写查询（在线程池中运行避免阻塞事件循环）
-
-        .. deprecated::
-            已被 QueryRewriter + MultiQueryRetriever 取代。保留仅为兼容旧单测，
-            新代码请使用 self.rewriter.rewrite() 获取多路变体。
-        """
-        import asyncio
-        try:
-            prompt = REWRITE_PROMPT.format(question=question)
-            messages = [{"role": "user", "content": prompt}]
-            loop = asyncio.get_event_loop()
-            rewritten = await loop.run_in_executor(
-                None, lambda: self.llm_service.chat(messages, temperature=0.3, max_tokens=200)
-            )
-            return rewritten.strip() or question
-        except Exception as e:
-            logger.warning(f"查询改写失败，使用原始查询: {e}")
-            return question
 
     def _process_results(self, raw_results: list[dict]) -> list[dict]:
         """处理检索结果（来自 HybridRetriever）"""

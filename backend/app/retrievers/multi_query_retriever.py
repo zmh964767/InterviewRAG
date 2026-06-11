@@ -6,7 +6,6 @@ score 取 max，累加 matched_queries 便于回溯。
 
 import asyncio
 import logging
-from collections.abc import Callable
 
 from app.retrievers.hybrid_retriever import HybridRetriever
 from app.retrievers.query_rewriter import QueryRewriter
@@ -66,7 +65,7 @@ class MultiQueryRetriever:
         # 每路取 2x top_k 留合并余量
         per_query_k = max(k * 2, 10)
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _one(q: str) -> list[dict]:
             try:

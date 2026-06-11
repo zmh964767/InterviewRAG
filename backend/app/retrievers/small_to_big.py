@@ -10,7 +10,6 @@
 3. 命中后，去重取回对应的大块送给 LLM
 """
 
-import hashlib
 import logging
 
 from app.config import get_settings
