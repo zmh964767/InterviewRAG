@@ -2,6 +2,8 @@
 
 POST /api/auth/login — 验证密码 → 签发 JWT
 
+修改密码的端点在 app/api/admin_change_password.py（避免循环导入）
+
 JWT 密钥在模块加载时自动初始化：
 - 如果 settings.jwt_secret_key 为非空，使用该值
 - 否则用 os.urandom(32).hex() 生成一次性密钥（重启后失效）
@@ -20,8 +22,9 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# 模块级缓存：JWT 密钥
+# 模块级缓存：JWT 密钥 + 密码覆盖
 _SECRET_KEY: str = ""
+_PASSWORD_OVERRIDE: str | None = None  # 改密码后的内存覆盖（重启失效前的最新值）
 
 
 def _init_jwt_secret() -> str:
@@ -29,7 +32,6 @@ def _init_jwt_secret() -> str:
     settings = get_settings()
     if settings.jwt_secret_key:
         return settings.jwt_secret_key
-    # 无配置时自动生成一次性密钥（重启后旧 token 失效）
     key = os.urandom(32).hex()
     logger.info(
         "JWT_SECRET_KEY 未配置，已自动生成一次性密钥 "
@@ -46,6 +48,17 @@ def _ensure_secret() -> str:
     return _SECRET_KEY
 
 
+def get_current_password() -> str:
+    """获取当前生效的密码（内存覆盖 > settings.admin_password）"""
+    return _PASSWORD_OVERRIDE if _PASSWORD_OVERRIDE is not None else get_settings().admin_password
+
+
+def set_password_override(new_password: str | None) -> None:
+    """设置内存密码覆盖（供 change-password 端点调用）"""
+    global _PASSWORD_OVERRIDE
+    _PASSWORD_OVERRIDE = new_password
+
+
 class LoginRequest(BaseModel):
     password: str
 
@@ -58,20 +71,16 @@ class LoginResponse(BaseModel):
 @router.post("/auth/login", response_model=LoginResponse)
 async def login(request: LoginRequest):
     """管理员登录：验证密码 → 签发 JWT"""
-    settings = get_settings()
+    current_pw = get_current_password()
 
-    if request.password != settings.admin_password:
+    if request.password != current_pw:
+        if current_pw == "admin123":
+            logger.warning("管理员密码使用默认值！请通过 ADMIN_PASSWORD 环境变量配置，或在管理后台修改密码")
         raise HTTPException(status_code=401, detail="密码错误")
-
-    # 安全警告：检测是否在使用默认密码
-    if not settings.admin_password or settings.admin_password == "admin123":
-        logger.warning(
-            "管理员正在使用默认密码登录！生产环境务必通过 ADMIN_PASSWORD 环境变量配置"
-        )
 
     secret = _ensure_secret()
     expire = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.jwt_expire_minutes
+        minutes=get_settings().jwt_expire_minutes
     )
 
     payload = {
@@ -79,6 +88,6 @@ async def login(request: LoginRequest):
         "role": "admin",
         "exp": expire,
     }
-    access_token = jwt.encode(payload, secret, algorithm=settings.jwt_algorithm)
+    access_token = jwt.encode(payload, secret, algorithm=get_settings().jwt_algorithm)
 
     return LoginResponse(access_token=access_token)

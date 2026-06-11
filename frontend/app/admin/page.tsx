@@ -16,13 +16,13 @@ export default function AdminDashboard() {
     const headers = { Authorization: `Bearer ${token}` }
 
     fetch(`${API_BASE}/api/admin/stats`, { headers })
-      .then((r) => r.json())
-      .then(setStats)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d && typeof d === 'object') setStats(d) })
       .catch(() => {})
 
     fetch(`${API_BASE}/api/admin/eval/summary`, { headers })
-      .then((r) => r.json())
-      .then(setEvalSummary)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => { if (d && typeof d === 'object') setEvalSummary(d) })
       .catch(() => {})
   }, [token])
 
@@ -42,7 +42,7 @@ export default function AdminDashboard() {
         </div>
         <div className="p-6 rounded-xl" style={{ background: 'var(--paper)', border: '1px solid var(--border)' }}>
           <div className="text-3xl font-light mb-1" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-            {stats ? Object.keys(stats.categories).length : '—'}
+            {stats?.categories ? Object.keys(stats.categories).length : '—'}
           </div>
           <div className="text-sm" style={{ color: 'var(--ink-muted)' }}>分类数</div>
         </div>
@@ -57,7 +57,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Category Breakdown */}
-      {stats && (
+      {stats?.categories && (
         <div className="p-6 rounded-xl" style={{ background: 'var(--paper)', border: '1px solid var(--border)' }}>
           <h2 className="text-base font-semibold mb-4" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
             分类统计

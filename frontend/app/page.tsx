@@ -13,7 +13,7 @@ export default function Home() {
 
   // 统一从 ChatContext 消费（conversations + 流式 + CRUD）
   const {
-    isLoading,
+    streamingConvId,
     conversations,
     currentId,
     currentMessages,
@@ -22,6 +22,9 @@ export default function Home() {
     deleteConversation,
     sendMessage,
   } = useChatContext()
+
+  // 是否当前正在生成（后台流式不打断用户体验，但 UI 只对当前会话显示 loading/停止按钮）
+  const isLoading = streamingConvId === currentId
 
   // 发送消息：确保有 convId → 调 sendMessage（user + 空 ai 由内部写入）
   const handleSend = useCallback(

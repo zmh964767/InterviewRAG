@@ -1,14 +1,16 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext'
 import Link from 'next/link'
+import { ChangePasswordDialog } from './ChangePasswordDialog'
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const { isLoggedIn, isLoading, logout } = useAdminAuth()
   const router = useRouter()
   const pathname = usePathname()
+  const [showChangePwd, setShowChangePwd] = useState(false)
 
   const isLoginPage = pathname === '/admin/login'
 
@@ -78,6 +80,18 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
         <div className="px-3 py-4 border-t" style={{ borderColor: 'var(--border)' }}>
           <button
+            onClick={() => setShowChangePwd(true)}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
+            style={{ color: 'var(--ink-muted)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--cream)' }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            修改密码
+          </button>
+          <button
             onClick={() => { logout(); router.replace('/admin/login') }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
             style={{ color: 'var(--ink-muted)' }}
@@ -96,6 +110,8 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
       <main className="flex-1 overflow-y-auto">
         {children}
       </main>
+
+      <ChangePasswordDialog isOpen={showChangePwd} onClose={() => setShowChangePwd(false)} />
     </div>
   )
 }

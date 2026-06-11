@@ -306,8 +306,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           abortRef.current?.signal.aborted
         )
         if (isAbort) {
-          // 预期中止：partial 内容已被 mergePartialIntoConversation 增量写入
-          // （每次 event.content 都会写回），不需要拼错误信息
+          // 预期中止：partial 内容已通过 mergePartialIntoConversation 增量写入。
+          // 给 partial 加「已中止」标记，让用户切回时看到"流被中断了"。
+          if (partialRef.current && partialRef.current.content) {
+            const stopped: StreamPartial = {
+              ...partialRef.current,
+              content: partialRef.current.content + '\n\n*— 已中断 —*',
+            }
+            setPartial(stopped)
+            partialRef.current = stopped
+            mergePartialIntoConversation(stopped)
+            subscribersRef.current.forEach((cb) => cb(stopped))
+          }
           return
         }
         const errMsg = err instanceof Error ? err.message : '未知'
@@ -336,8 +346,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchConversation = useCallback((id: string) => {
-    // 切换对话时中止当前流式请求
-    abortRef.current?.abort()
+    // 不中止当前流：让流在后台继续生成，partial 内容会通过
+    // mergePartialIntoConversation 增量写入对应会话。切回时直接从
+    // conversations 里读取最新状态，不打断用户体验。
     setCurrentId(id)
   }, [])
 

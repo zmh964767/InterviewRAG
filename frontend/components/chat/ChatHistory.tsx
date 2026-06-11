@@ -13,19 +13,44 @@ interface ChatHistoryProps {
 
 export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatHistoryProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
   const prevLenRef = useRef(messages.length)
-  // 标记组件是否刚挂载（用于"已挂载但 messages.length 增长"才是新消息；
-  // "刚挂载 + messages 已经有很多"是路由切换恢复，不算新消息）
   const mountedRef = useRef(false)
 
-  // 只在消息数量增加时自动滚动（切换对话/加载历史不触发）
+  // 滚动策略：
+  // - 首次挂载（路由恢复）→ 滚到底部（用户回到对话时看到最新消息）
+  // - 已挂载 + messages.length 增加（流式新消息）→ 滚到底部
+  // - 已挂载 + 流式 partial 更新（content 变化但 length 不变）→ 仅在用户已在底部时跟随
   useEffect(() => {
-    if (mountedRef.current && messages.length > prevLenRef.current) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const len = messages.length
+    if (!mountedRef.current) {
+      // 首次挂载：滚到底部
+      // requestAnimationFrame 等 DOM 渲染完再滚
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ block: 'end' })
+      })
+    } else if (len > prevLenRef.current) {
+      // 新消息追加：滚到底部
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ block: 'end' })
+      })
     }
     mountedRef.current = true
-    prevLenRef.current = messages.length
+    prevLenRef.current = len
   }, [messages.length])
+
+  // 流式 partial 更新时（content 变，length 不变）：如果用户已经在底部附近则跟随
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    // 检查用户是否在底部 100px 范围内
+    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    if (distanceToBottom < 100) {
+      requestAnimationFrame(() => {
+        bottomRef.current?.scrollIntoView({ block: 'end' })
+      })
+    }
+  }, [messages])
 
   // Welcome screen
   if (messages.length === 0) {
@@ -115,7 +140,7 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
 
   // Messages
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={containerRef} className="flex-1 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-6 py-8">
         {messages.map((message, index) => {
           const isLastAssistant = message.role === 'assistant' && index === messages.length - 1

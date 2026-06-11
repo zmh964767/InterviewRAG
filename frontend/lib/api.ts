@@ -65,10 +65,13 @@ export async function* queryStream(
 
   const decoder = new TextDecoder()
   let buffer = ''
+  let aborted = false
 
   // 监听 abort 信号，主动 cancel reader（避免 reader.read() 在 abort 后继续读到 stale 帧）
+  // cancel 让 reader 干净结束（done=true 不抛错），但我们要让上游感知到 abort 状态
   if (signal) {
     signal.addEventListener('abort', () => {
+      aborted = true
       reader.cancel().catch(() => {})
     }, { once: true })
   }
@@ -76,6 +79,9 @@ export async function* queryStream(
   while (true) {
     const { done, value } = await reader.read()
     if (done) break
+
+    // abort 后 reader 仍可能返回最后几个 chunk，主动丢弃
+    if (aborted) continue
 
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
@@ -91,6 +97,13 @@ export async function* queryStream(
         }
       }
     }
+  }
+
+  // abort 后读循环正常结束（done=true），但我们需要告诉调用方"这是被中断的"
+  if (aborted) {
+    const err = new Error('Aborted')
+    err.name = 'AbortError'
+    throw err
   }
 
   // 处理剩余 buffer
@@ -259,5 +272,25 @@ export async function adminGetTaskStatus(taskId: string): Promise<TaskStatusResp
 export async function adminListActiveTasks(): Promise<TaskListResponse> {
   const res = await fetch(`${API_BASE}/api/admin/ingest/tasks`, { headers: adminHeaders() })
   if (!res.ok) throw new Error(`任务列表查询失败: HTTP ${res.status}`)
+  return res.json()
+}
+
+/** 管理端：修改管理员密码 */
+export async function adminChangePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/change-password`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: '修改失败' }))
+    throw new Error(error.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
