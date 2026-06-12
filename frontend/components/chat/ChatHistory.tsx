@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import type { Message } from '@/lib/types'
 import { ChatMessage } from './ChatMessage'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { useChatContext } from '@/contexts/ChatContext'
 
 interface ChatHistoryProps {
@@ -182,15 +183,11 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
             </div>
             <div className="flex-1">
               <div
-                className="inline-flex items-center gap-3 px-4 py-3 rounded-xl text-sm"
-                style={{ background: 'var(--paper)', color: 'var(--ink-muted)', border: '1px solid var(--border-subtle)' }}
+                className="inline-block px-4 py-3 rounded-xl"
+                style={{ background: 'var(--paper)', border: '1px solid var(--border-subtle)' }}
               >
-                <div className="flex gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--ink-muted)', animationDelay: '-0.3s' }} />
-                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--ink-muted)', animationDelay: '-0.15s' }} />
-                  <span className="w-1.5 h-1.5 rounded-full animate-bounce" style={{ background: 'var(--ink-muted)' }} />
-                </div>
-                <span className="text-xs">检索知识库中...</span>
+                <Skeleton className="h-4 w-48 mb-2" />
+                <Skeleton className="h-4 w-32" />
               </div>
             </div>
           </div>

@@ -9,8 +9,9 @@ import { QuestionDetail } from '@/components/kb/QuestionDetail'
 import { QuestionTable } from '@/components/kb/QuestionTable'
 import { UndoToast } from '@/components/kb/UndoToast'
 import { ErrorBanner } from '@/components/ui/ErrorBanner'
+import { Skeleton } from '@/components/ui/Skeleton'
 import { adminDeleteQuestion, adminInsertOne, adminListQuestions } from '@/lib/api'
-import { ADMIN } from '@/lib/copy'
+import { ADMIN, KB, QUESTIONS } from '@/lib/copy'
 import type { Question, QuestionListResponse } from '@/lib/types'
 
 const DEFAULT_SIZE = 20
@@ -139,9 +140,9 @@ export default function AdminKbPage() {
         style={{ borderColor: 'var(--border)', background: 'rgba(250, 248, 245, 0.8)' }}
       >
         <h1 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-          知识库管理
+          {KB.TITLE}
         </h1>
-        <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>共 {total} 题</span>
+        <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>{KB.TOTAL(total)}</span>
         <div className="flex-1" />
         <button
           onClick={() => setIngestOpen(true)}
@@ -151,7 +152,7 @@ export default function AdminKbPage() {
           <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
-          导入
+          {KB.IMPORT}
         </button>
       </header>
 
@@ -159,7 +160,7 @@ export default function AdminKbPage() {
       <div className="px-6 py-3 flex flex-wrap items-center gap-3 border-b" style={{ borderColor: 'var(--border)' }}>
         <input
           type="text"
-          placeholder="搜索题面或答案..."
+          placeholder={KB.SEARCH_PLACEHOLDER}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="px-3 py-1.5 text-sm rounded-lg outline-none w-64"
@@ -201,11 +202,40 @@ export default function AdminKbPage() {
 
       {/* 列表 */}
       <div className="flex-1 overflow-hidden hidden md:flex flex-col">
-        <QuestionTable items={items} onSelect={setSelected} onDelete={setToDelete} />
+        {isLoading && items.length === 0 ? (
+          <div className="flex-1 overflow-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead className="sticky top-0" style={{ background: 'var(--paper)', borderBottom: '1px solid var(--border)' }}>
+                <tr style={{ color: 'var(--ink-muted)' }}>
+                  <th className="text-left px-4 py-3 font-medium" style={{ width: 80 }}>ID</th>
+                  <th className="text-left px-4 py-3 font-medium">题面</th>
+                  <th className="text-left px-4 py-3 font-medium" style={{ width: 120 }}>分类</th>
+                  <th className="text-left px-4 py-3 font-medium" style={{ width: 80 }}>难度</th>
+                  <th className="text-left px-4 py-3 font-medium" style={{ width: 140 }}>创建时间</th>
+                  <th className="text-right px-4 py-3 font-medium" style={{ width: 80 }}>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-14" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-64" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-5 w-12" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
+                    <td className="px-4 py-3 text-right"><Skeleton className="h-6 w-12 ml-auto" /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <QuestionTable items={items} onSelect={setSelected} onDelete={setToDelete} />
+        )}
       </div>
       <div className="flex-1 overflow-y-auto md:hidden p-4">
         {items.length === 0 ? (
-          <p className="text-center text-sm py-8" style={{ color: 'var(--ink-muted)' }}>没有题目</p>
+          <p className="text-center text-sm py-8" style={{ color: 'var(--ink-muted)' }}>{KB.EMPTY}</p>
         ) : (
           items.map((q) => <QuestionCard key={q.id} question={q} onSelect={setSelected} onDelete={setToDelete} />)
         )}
@@ -223,13 +253,13 @@ export default function AdminKbPage() {
               disabled={page <= 1}
               className="px-3 py-1 text-sm rounded disabled:opacity-30"
               style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
-            >上一页</button>
+            >{QUESTIONS.PREV_PAGE}</button>
             <button
               onClick={() => setPage(page + 1)}
               disabled={page * DEFAULT_SIZE >= total}
               className="px-3 py-1 text-sm rounded disabled:opacity-30"
               style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
-            >下一页</button>
+            >{QUESTIONS.NEXT_PAGE}</button>
           </div>
         </div>
       )}

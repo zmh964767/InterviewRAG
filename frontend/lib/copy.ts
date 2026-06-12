@@ -72,3 +72,37 @@ export const A11Y = {
   SWITCH_TO_CONVERSATIONS: '切换到对话',
   SWITCH_TO_QUESTIONS: '切换到题目库',
 } as const
+
+/** 题目库高频文案 */
+export const QUESTIONS = {
+  TITLE: '题目库',
+  TOTAL: (n: number) => `共 ${n} 题`,
+  SEARCH_PLACEHOLDER: '搜索题面或答案...',
+  EMPTY: '没有题目',
+  PREV_PAGE: '上一页',
+  NEXT_PAGE: '下一页',
+} as const
+
+/** 评估页高频文案 */
+export const EVAL = {
+  TITLE: '评估报告',
+  LAST_RUN: (ts: string) => `最近运行: ${ts}`,
+  RAGAS_TITLE: 'RAGAS 指标',
+  COMPARISON_TITLE: '检索策略对比',
+  EMPTY: '暂无评估数据',
+  LOAD_ERROR: '无法加载评估数据',
+  TOTAL_QUESTIONS: '总题数',
+  ERROR_COUNT: '错误数',
+  HISTORY_TITLE: '历史快照',
+  LOAD_DETAIL: '加载详情...',
+  LOAD_DETAIL_FAILED: '加载失败',
+} as const
+
+/** 知识库管理高频文案 */
+export const KB = {
+  TITLE: '知识库管理',
+  TOTAL: (n: number) => `共 ${n} 题`,
+  SEARCH_PLACEHOLDER: '搜索题面或答案...',
+  EMPTY: '没有题目',
+  IMPORT: '导入',
+} as const
