@@ -327,7 +327,16 @@ export default function AdminKbPage() {
       )}
 
       {/* 弹窗 */}
-      <QuestionDetail question={selected} onClose={() => setSelected(null)} onDelete={setToDelete} />
+      <QuestionDetail
+        question={selected}
+        categories={categories}
+        onClose={() => setSelected(null)}
+        onDelete={setToDelete}
+        onSave={(updated) => {
+          setItems(prev => prev.map(i => i.id === updated.id ? updated : i))
+          setSelected(null)
+        }}
+      />
       <DeleteConfirmDialog question={toDelete} onCancel={() => setToDelete(null)} onConfirm={handleConfirmDelete} />
       <UndoToast question={undoBuffer} onUndo={handleUndo} onDismiss={() => setUndoBuffer(null)} />
       <IngestModal isOpen={ingestOpen} onClose={() => setIngestOpen(false)} onComplete={refresh} />

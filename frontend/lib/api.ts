@@ -200,6 +200,23 @@ export async function adminBatchDelete(ids: string[]): Promise<{ deleted: number
   return res.json()
 }
 
+/** 管理端：更新题目 */
+export async function adminUpdateQuestion(
+  id: string,
+  fields: { question?: string; answer?: string; category?: string; difficulty?: string }
+): Promise<Question> {
+  const res = await fetch(`${API_BASE}/api/admin/questions/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: adminHeaders(),
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: '更新失败' }))
+    throw new Error(error.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 /** 管理端：统计 */
 export async function adminGetStats(signal?: AbortSignal): Promise<StatsResponse> {
   const res = await fetch(`${API_BASE}/api/admin/stats`, {
