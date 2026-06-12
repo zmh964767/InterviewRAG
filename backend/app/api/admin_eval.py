@@ -3,7 +3,9 @@
 GET  /api/admin/eval/summary  — 评估汇总
 GET  /api/admin/eval/detail   — 评估详情
 POST /api/admin/eval/run      — 异步触发评估
-GET  /api/admin/eval/tasks     — 列出评估任务
+POST /api/admin/eval/cancel   — 取消正在运行的评估
+GET  /api/admin/eval/tasks    — 列出评估任务
+GET  /api/admin/eval/compare  — 两快照指标对比
 """
 
 import asyncio
@@ -13,7 +15,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.api.deps_admin import require_admin
@@ -114,6 +116,77 @@ async def cancel_eval_endpoint():
         cancelled += 1
 
     return {"cancelled": cancelled}
+
+
+# 参与对比的 4 个 RAGAS 指标
+_COMPARE_METRICS = ("faithfulness", "answer_relevancy", "context_precision", "context_recall")
+
+
+@router.get("/eval/compare")
+async def eval_compare(
+    base: str = Query(..., description="base 快照时间戳,或 'latest'"),
+    target: str = Query(..., description="target 快照时间戳,或 'latest'"),
+):
+    """对比两个评估快照的 RAGAS 指标
+
+    ts 支持 "latest" 关键字指向 latest.json,或合法的时间戳字符串。
+    """
+    from app.models.schemas import CompareResponse, MetricDiff
+    from evaluation.regression import REGRESSION_THRESHOLD
+
+    def _resolve_path(ts: str) -> Path:
+        if ts == "latest":
+            return RESULTS_DIR / "latest.json"
+        if not _TS_RE.match(ts):
+            raise HTTPException(status_code=400, detail="ts 参数格式无效")
+        return RESULTS_DIR / "history" / f"{ts}.json"
+
+    base_path = _resolve_path(base)
+    target_path = _resolve_path(target)
+    if not base_path.exists():
+        raise HTTPException(status_code=404, detail=f"未找到 base 快照: {base}")
+    if not target_path.exists():
+        raise HTTPException(status_code=404, detail=f"未找到 target 快照: {target}")
+
+    base_data = json.loads(base_path.read_text(encoding="utf-8"))
+    target_data = json.loads(target_path.read_text(encoding="utf-8"))
+
+    base_metrics = base_data.get("aggregated", {}) or {}
+    target_metrics = target_data.get("aggregated", {}) or {}
+
+    diffs: list[MetricDiff] = []
+    for metric in _COMPARE_METRICS:
+        b = float(base_metrics.get(metric, 0) or 0)
+        t = float(target_metrics.get(metric, 0) or 0)
+        change = t - b
+        if abs(change) < REGRESSION_THRESHOLD:
+            direction = "same"
+        elif change > 0:
+            direction = "up"
+        else:
+            direction = "down"
+        diffs.append(MetricDiff(name=metric, base=b, target=t, change=round(change, 4), direction=direction))
+
+    improved = sum(1 for d in diffs if d.direction == "up")
+    regressed = sum(1 for d in diffs if d.direction == "down")
+    same = sum(1 for d in diffs if d.direction == "same")
+
+    def _summary(d: dict, fallback_ts: str) -> dict:
+        return {
+            "timestamp": d.get("timestamp", fallback_ts),
+            "total": d.get("total", 0),
+            "error_count": len(d.get("errors", []) or []),
+            "metrics": d.get("aggregated", {}) or {},
+        }
+
+    return CompareResponse(
+        base=_summary(base_data, base),
+        target=_summary(target_data, target),
+        diffs=diffs,
+        improved=improved,
+        regressed=regressed,
+        same=same,
+    )
 
 
 @router.get("/eval/tasks")

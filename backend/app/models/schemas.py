@@ -143,3 +143,26 @@ class UpdateQuestionRequest(BaseModel):
     answer: str | None = None
     category: str | None = None
     difficulty: str | None = None
+
+
+# =========================================================================
+# 评估快照对比
+# =========================================================================
+
+class MetricDiff(BaseModel):
+    """单个指标的 base/target 对比"""
+    name: str = Field(description="指标名: faithfulness|answer_relevancy|context_precision|context_recall")
+    base: float = Field(description="base 快照的指标值")
+    target: float = Field(description="target 快照的指标值")
+    change: float = Field(description="target - base")
+    direction: str = Field(description="变化方向: up|down|same")
+
+
+class CompareResponse(BaseModel):
+    """两个评估快照的对比响应"""
+    base: dict = Field(description="base 快照元信息: timestamp/total/error_count/metrics")
+    target: dict = Field(description="target 快照元信息")
+    diffs: list[MetricDiff] = Field(default_factory=list, description="逐指标 diff")
+    improved: int = Field(description="上升的指标数")
+    regressed: int = Field(description="下降的指标数")
+    same: int = Field(description="持平的指标数")
