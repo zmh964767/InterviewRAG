@@ -1,17 +1,25 @@
 """管理端：评估报告接口
 
-GET /api/admin/eval/summary  — 评估汇总
-GET /api/admin/eval/detail   — 评估详情
+GET  /api/admin/eval/summary  — 评估汇总
+GET  /api/admin/eval/detail   — 评估详情
+POST /api/admin/eval/run      — 异步触发评估
+GET  /api/admin/eval/tasks     — 列出评估任务
 """
 
+import asyncio
 import json
+import logging
 import re
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.api.deps_admin import require_admin
+from app.services.task_store import store as task_store
 
+logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "evaluation" / "results"
@@ -72,3 +80,86 @@ async def eval_detail(ts: str | None = None):
         raise HTTPException(status_code=404, detail="未找到该评估结果")
 
     return json.loads(file_path.read_text(encoding="utf-8"))
+
+
+class RunEvalRequest(BaseModel):
+    mode: str = "full"  # "full" | "ragas" | "comparison" | "sanity"
+
+
+@router.post("/eval/run")
+async def run_eval_endpoint(request: RunEvalRequest):
+    """异步触发评估任务（限流：已有 running 时拒绝）"""
+    if request.mode not in ("full", "ragas", "comparison", "sanity"):
+        raise HTTPException(status_code=400, detail=f"不支持的 mode: {request.mode}")
+
+    if task_store.list_active():
+        raise HTTPException(status_code=409, detail="已有评估任务在进行中")
+
+    task = task_store.create("eval", f"mode={request.mode}")
+    asyncio.create_task(_run_eval_task(task.task_id, request.mode))
+    return {"task_id": task.task_id}
+
+
+@router.get("/eval/tasks")
+async def list_eval_tasks():
+    """列出所有评估任务（用于前端轮询）"""
+    from app.models.schemas import TaskListResponse
+    tasks = task_store.list_all() if hasattr(task_store, "list_all") else task_store.list_active()
+    return TaskListResponse(tasks=[{
+        "task_id": t.task_id,
+        "status": t.status,
+        "source_type": t.source_type,
+        "source": t.source,
+        "total": t.total,
+        "done": t.done,
+        "ingested": t.ingested,
+        "duplicates": t.duplicates,
+        "errors": t.errors,
+        "started_at": t.started_at,
+        "finished_at": t.finished_at,
+        "error_message": t.error_message,
+    } for t in tasks])
+
+
+async def _run_eval_task(task_id: str, mode: str) -> None:
+    """后台执行评估任务"""
+    task_store.update(task_id, status="running")
+    try:
+        from evaluation.run import load_eval_dataset
+        from evaluation.runner import run_ragas_evaluation, run_comparison_evaluation
+        from evaluation.regression import save_results
+        from evaluation.zhipu_llm import EvalSummary
+
+        items = load_eval_dataset()
+        if not items:
+            raise RuntimeError("评估数据集为空")
+
+        # 跑 RAGAS（如需要）
+        if mode in ("full", "ragas", "sanity"):
+            summary = await run_ragas_evaluation(items)
+        else:
+            summary = EvalSummary(results=[], aggregated={}, errors=[], error_rate=0)
+
+        # 跑 comparison（如需要）
+        if mode in ("full", "comparison"):
+            comparison = await run_comparison_evaluation(items)
+        else:
+            comparison = {}
+
+        # 保存结果
+        save_results(summary=summary, comparison=comparison, results_dir=RESULTS_DIR)
+
+        task_store.update(
+            task_id,
+            status="done",
+            finished_at=datetime.now().isoformat(),
+        )
+        logger.info(f"评估任务 {task_id} 完成")
+    except Exception as e:
+        logger.error(f"评估任务 {task_id} 失败: {e}", exc_info=True)
+        task_store.update(
+            task_id,
+            status="failed",
+            error_message=str(e),
+            finished_at=datetime.now().isoformat(),
+        )
