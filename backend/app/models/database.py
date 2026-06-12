@@ -188,6 +188,26 @@ class Database:
         )
         return {row[0]: row[1] for row in cursor.fetchall()}
 
+    def batch_delete(self, ids: list[str]) -> int:
+        """批量删除题目，返回实际删除条数
+
+        Args:
+            ids: 要删除的题目 ID 列表
+
+        Returns:
+            实际删除的条数（不存在的 ID 不影响结果）
+        """
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        cursor = self.conn.cursor()
+        cursor.execute(
+            f"DELETE FROM questions WHERE id IN ({placeholders})",
+            ids,
+        )
+        self.conn.commit()
+        return cursor.rowcount
+
     def close(self):
         """关闭连接"""
         self.conn.close()

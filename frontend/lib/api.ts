@@ -186,6 +186,20 @@ export async function adminDeleteQuestion(id: string): Promise<DeleteQuestionRes
   return res.json()
 }
 
+/** 管理端：批量删除题目 */
+export async function adminBatchDelete(ids: string[]): Promise<{ deleted: number }> {
+  const res = await fetch(`${API_BASE}/api/admin/questions/batch-delete`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify({ ids }),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: '批量删除失败' }))
+    throw new Error(error.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 /** 管理端：统计 */
 export async function adminGetStats(signal?: AbortSignal): Promise<StatsResponse> {
   const res = await fetch(`${API_BASE}/api/admin/stats`, {

@@ -125,3 +125,13 @@ class ErrorResponse(BaseModel):
     """错误响应"""
     detail: str = Field(description="错误描述")
     status_code: int = Field(description="HTTP 状态码")
+
+
+class BatchDeleteRequest(BaseModel):
+    """批量删除请求"""
+    ids: list[str]
+
+
+class BatchDeleteResponse(BaseModel):
+    """批量删除响应"""
+    deleted: int

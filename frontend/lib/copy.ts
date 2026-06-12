@@ -105,4 +105,9 @@ export const KB = {
   SEARCH_PLACEHOLDER: '搜索题面或答案...',
   EMPTY: '没有题目',
   IMPORT: '导入',
+  SELECTED: (n: number) => `已选择 ${n} 条`,
+  BATCH_DELETE: '批量删除',
+  BATCH_DELETE_CONFIRM: (n: number) => `确认删除 ${n} 条题目？此操作不可撤销。`,
+  DELETE_SUCCESS: (n: number) => `已删除 ${n} 条`,
+  BATCH_IMPORTING: '批量导入中...',
 } as const

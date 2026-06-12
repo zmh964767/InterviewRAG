@@ -147,3 +147,31 @@ class TestListCategories:
         cats = db.list_categories()
         assert "" not in cats
         assert "前端" in cats
+
+
+class TestBatchDelete:
+    def test_batch_delete_basic(self, db):
+        db.insert_question(_make_q("q1", "Q1", "A1"))
+        db.insert_question(_make_q("q2", "Q2", "A2"))
+        db.insert_question(_make_q("q3", "Q3", "A3"))
+        deleted = db.batch_delete(["q1", "q2"])
+        assert deleted == 2
+        assert db.get_question_by_id("q1") is None
+        assert db.get_question_by_id("q2") is None
+        assert db.get_question_by_id("q3") is not None
+
+    def test_batch_delete_nonexistent(self, db):
+        deleted = db.batch_delete(["notexist1", "notexist2"])
+        assert deleted == 0
+
+    def test_batch_delete_mixed(self, db):
+        db.insert_question(_make_q("q1", "Q1", "A1"))
+        db.insert_question(_make_q("q2", "Q2", "A2"))
+        deleted = db.batch_delete(["q1", "notexist"])
+        assert deleted == 1
+        assert db.get_question_by_id("q1") is None
+        assert db.get_question_by_id("q2") is not None
+
+    def test_batch_delete_empty_list(self, db):
+        deleted = db.batch_delete([])
+        assert deleted == 0

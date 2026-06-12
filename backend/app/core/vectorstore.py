@@ -120,6 +120,21 @@ class VectorStore:
         logger.info(f"已删除 ChromaDB 文档: {question_id}")
         return True
 
+    def delete_by_ids(self, question_ids: list[str]) -> int:
+        """批量删除向量
+
+        Args:
+            question_ids: 要删除的题目 ID 列表
+
+        Returns:
+            删除的 ID 数量
+        """
+        if not question_ids:
+            return 0
+        self.collection.delete(ids=question_ids)
+        logger.info(f"已删除 ChromaDB 文档: {len(question_ids)} 条")
+        return len(question_ids)
+
     def get_all(self) -> dict:
         """获取所有文档"""
         return self.collection.get(include=["documents", "metadatas"])

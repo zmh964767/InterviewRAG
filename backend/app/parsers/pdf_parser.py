@@ -41,10 +41,9 @@ def extract_question_text(text: str) -> str:
 def parse_pdf(file_path: str, category: str = "PDF面试题") -> list[Question]:
     """解析 PDF 文件"""
     try:
-        from pypdf2 import PdfReader
+        from pypdf import PdfReader
     except ImportError:
-        logger.error("pypdf2 未安装，请运行: pip install pypdf2")
-        return []
+        from PyPDF2 import PdfReader
 
     try:
         reader = PdfReader(file_path)
@@ -69,11 +68,11 @@ def parse_pdf(file_path: str, category: str = "PDF面试题") -> list[Question]:
 def parse_pdf_content(content: bytes, filename: str, category: str = "PDF面试题") -> list[Question]:
     """解析 PDF 内容（字节流）"""
     try:
-        from pypdf2 import PdfReader
+        from pypdf import PdfReader
         import io
     except ImportError:
-        logger.error("pypdf2 未安装")
-        return []
+        from PyPDF2 import PdfReader
+        import io
 
     try:
         reader = PdfReader(io.BytesIO(content))

@@ -13,6 +13,8 @@ from app.api.deps_admin import require_admin
 from app.core.exceptions import NotFoundError
 from app.models.database import Database
 from app.models.schemas import (
+    BatchDeleteRequest,
+    BatchDeleteResponse,
     DeleteQuestionResponse,
     QuestionListResponse,
 )
@@ -61,3 +63,19 @@ async def delete_question(
         raise NotFoundError("题目", question_id)
 
     return DeleteQuestionResponse(deleted=True, id=question_id)
+
+
+@router.post("/questions/batch-delete", response_model=BatchDeleteResponse)
+async def batch_delete_questions(
+    request: BatchDeleteRequest,
+    db: Database = Depends(get_db),
+    rag: RAGService = Depends(get_rag_service),
+):
+    """批量删除题目（同时删 ChromaDB + SQLite）"""
+    try:
+        rag.vector_store.delete_by_ids(request.ids)
+    except Exception as e:
+        logger.error(f"ChromaDB 批量删除失败: {e}")
+        # 不回滚，继续删 SQLite
+    deleted = db.batch_delete(request.ids)
+    return BatchDeleteResponse(deleted=deleted)

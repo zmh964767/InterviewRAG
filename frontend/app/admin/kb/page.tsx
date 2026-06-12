@@ -8,9 +8,11 @@ import { QuestionCard } from '@/components/kb/QuestionCard'
 import { QuestionDetail } from '@/components/kb/QuestionDetail'
 import { QuestionTable } from '@/components/kb/QuestionTable'
 import { UndoToast } from '@/components/kb/UndoToast'
+import { BatchToolbar } from '@/components/kb/BatchToolbar'
+import { BatchDeleteDialog } from '@/components/kb/BatchDeleteDialog'
 import { ErrorBanner } from '@/components/ui/ErrorBanner'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { adminDeleteQuestion, adminInsertOne, adminListQuestions } from '@/lib/api'
+import { adminBatchDelete, adminDeleteQuestion, adminInsertOne, adminListQuestions } from '@/lib/api'
 import { ADMIN, KB, QUESTIONS } from '@/lib/copy'
 import type { Question, QuestionListResponse } from '@/lib/types'
 
@@ -33,6 +35,8 @@ export default function AdminKbPage() {
 
   // UI 状态
   const [selected, setSelected] = useState<Question | null>(null)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [toDelete, setToDelete] = useState<Question | null>(null)
   const [undoBuffer, setUndoBuffer] = useState<Question | null>(null)
   const [ingestOpen, setIngestOpen] = useState(false)
@@ -132,6 +136,52 @@ export default function AdminKbPage() {
       })
   }, [undoBuffer, refresh, setActionErrorWithAutoDismiss])
 
+  // 多选相关
+  const handleToggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }, [])
+
+  const handleToggleSelectAll = useCallback(() => {
+    setSelectedIds((prev) => {
+      const allIds = items.map(i => i.id)
+      const allSelected = allIds.length > 0 && allIds.every(id => prev.has(id))
+      const next = new Set(prev)
+      if (allSelected) {
+        allIds.forEach(id => next.delete(id))
+      } else {
+        allIds.forEach(id => next.add(id))
+      }
+      return next
+    })
+  }, [items])
+
+  const handleBatchDelete = useCallback(async () => {
+    const ids = Array.from(selectedIds)
+    const removedItems = items.filter(i => selectedIds.has(i.id))
+    setBatchDeleteOpen(false)
+    setSelectedIds(new Set())
+    setItems((prev) => prev.filter(i => !selectedIds.has(i.id)))
+    setTotal((prev) => Math.max(0, prev - ids.length))
+    try {
+      const { deleted } = await adminBatchDelete(ids)
+      setActionErrorWithAutoDismiss(KB.DELETE_SUCCESS(deleted))
+    } catch (e) {
+      setItems((prev) => [...removedItems, ...prev])
+      setTotal((prev) => prev + removedItems.length)
+      setActionErrorWithAutoDismiss(
+        `${ADMIN.ALERTS.DELETE_FAILED}: ${e instanceof Error ? e.message : '未知错误'}`,
+      )
+    }
+  }, [selectedIds, items, setActionErrorWithAutoDismiss])
+
   return (
     <div className="flex flex-col h-full">
       {/* 顶部工具栏 */}
@@ -200,6 +250,9 @@ export default function AdminKbPage() {
         </div>
       )}
 
+      {/* 批量操作工具栏 */}
+      <BatchToolbar selectedCount={selectedIds.size} onDelete={() => setBatchDeleteOpen(true)} />
+
       {/* 列表 */}
       <div className="flex-1 overflow-hidden hidden md:flex flex-col">
         {isLoading && items.length === 0 ? (
@@ -207,6 +260,7 @@ export default function AdminKbPage() {
             <table className="w-full text-sm border-collapse">
               <thead className="sticky top-0" style={{ background: 'var(--paper)', borderBottom: '1px solid var(--border)' }}>
                 <tr style={{ color: 'var(--ink-muted)' }}>
+                  <th className="text-left px-4 py-3 font-medium" style={{ width: 48 }} />
                   <th className="text-left px-4 py-3 font-medium" style={{ width: 80 }}>ID</th>
                   <th className="text-left px-4 py-3 font-medium">题面</th>
                   <th className="text-left px-4 py-3 font-medium" style={{ width: 120 }}>分类</th>
@@ -218,6 +272,7 @@ export default function AdminKbPage() {
               <tbody>
                 {Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-14" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-64" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
@@ -230,7 +285,14 @@ export default function AdminKbPage() {
             </table>
           </div>
         ) : (
-          <QuestionTable items={items} onSelect={setSelected} onDelete={setToDelete} />
+          <QuestionTable
+            items={items}
+            selectedIds={selectedIds}
+            onToggleSelect={handleToggleSelect}
+            onToggleSelectAll={handleToggleSelectAll}
+            onSelect={setSelected}
+            onDelete={setToDelete}
+          />
         )}
       </div>
       <div className="flex-1 overflow-y-auto md:hidden p-4">
@@ -269,6 +331,12 @@ export default function AdminKbPage() {
       <DeleteConfirmDialog question={toDelete} onCancel={() => setToDelete(null)} onConfirm={handleConfirmDelete} />
       <UndoToast question={undoBuffer} onUndo={handleUndo} onDismiss={() => setUndoBuffer(null)} />
       <IngestModal isOpen={ingestOpen} onClose={() => setIngestOpen(false)} onComplete={refresh} />
+      <BatchDeleteDialog
+        isOpen={batchDeleteOpen}
+        items={items.filter(i => selectedIds.has(i.id))}
+        onCancel={() => setBatchDeleteOpen(false)}
+        onConfirm={handleBatchDelete}
+      />
     </div>
   )
 }
