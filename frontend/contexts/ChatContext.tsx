@@ -4,6 +4,7 @@ import {
   createContext,
   useContext,
   useState,
+  useReducer,
   useCallback,
   useRef,
   useEffect,
@@ -73,6 +74,66 @@ export interface ChatContextValue {
 
 const ChatContext = createContext<ChatContextValue | null>(null)
 
+type ConvAction =
+  | { type: 'LOAD'; payload: Conversation[] }
+  | { type: 'CREATE'; payload: Conversation }
+  | { type: 'DELETE'; payload: { id: string } }
+  | { type: 'RENAME'; payload: { id: string; title: string } }
+  | { type: 'REPLACE_MESSAGE'; payload: { convId: string; aiMsgId: string; content: string; sources: SourceRef[] } }
+  | { type: 'UPDATE_MESSAGES'; payload: { convId: string; messages: Message[]; title?: string } }
+  | { type: 'APPEND_USER_AI'; payload: { convId: string; userMsg: Message; aiMsg: Message; isFirstUser: boolean } }
+  | { type: 'TOUCH'; payload: { id: string } }
+
+function convReducer(state: Conversation[], action: ConvAction): Conversation[] {
+  switch (action.type) {
+    case 'LOAD':
+      return action.payload
+    case 'CREATE':
+      return [action.payload, ...state]
+    case 'DELETE':
+      return state.filter(c => c.id !== action.payload.id)
+    case 'RENAME':
+      return state.map(c => c.id === action.payload.id ? { ...c, title: action.payload.title } : c)
+    case 'REPLACE_MESSAGE': {
+      const { convId, aiMsgId, content, sources } = action.payload
+      return state.map(c => {
+        if (c.id !== convId) return c
+        const idx = c.messages.findIndex(m => m.id === aiMsgId)
+        if (idx >= 0) {
+          const next = c.messages.slice()
+          next[idx] = { ...next[idx], content, sources }
+          return { ...c, messages: next, updatedAt: Date.now() }
+        }
+        const newMsg: Message = { id: aiMsgId, role: 'assistant', content, sources, timestamp: Date.now() }
+        return { ...c, messages: [...c.messages, newMsg], updatedAt: Date.now() }
+      })
+    }
+    case 'UPDATE_MESSAGES': {
+      const { convId, messages, title } = action.payload
+      return state.map(c => {
+        if (c.id !== convId) return c
+        return { ...c, messages, title: title ?? c.title, updatedAt: Date.now() }
+      })
+    }
+    case 'APPEND_USER_AI': {
+      const { convId, userMsg, aiMsg, isFirstUser } = action.payload
+      return state.map(c => {
+        if (c.id !== convId) return c
+        return {
+          ...c,
+          messages: [...c.messages, userMsg, aiMsg],
+          updatedAt: Date.now(),
+          title: isFirstUser ? getTitleFromMessages([userMsg]) : c.title,
+        }
+      })
+    }
+    case 'TOUCH':
+      return state.map(c => c.id === action.payload.id ? { ...c, updatedAt: Date.now() } : c)
+    default:
+      return state
+  }
+}
+
 export function useChatContext(): ChatContextValue {
   const ctx = useContext(ChatContext)
   if (!ctx) throw new Error('useChatContext must be used within ChatProvider')
@@ -131,7 +192,9 @@ function createEmptyConversation(): Conversation {
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   // ---- conversations state ----
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [conversations, dispatch] = useReducer(convReducer, [])
+  const conversationsRef = useRef<Conversation[]>([])
+  conversationsRef.current = conversations
   const [currentId, setCurrentId] = useState<string | null>(null)
 
   // ---- streaming state ----
@@ -154,6 +217,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const currentIdRef = useRef<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasHydratedRef = useRef(false)
+  const isLoadingRef = useRef(false)
+  isLoadingRef.current = isLoading
 
   partialRef.current = partial
   currentIdRef.current = currentId
@@ -161,7 +226,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ---- 加载 localStorage（仅一次） ----
   useEffect(() => {
     const loaded = loadConversations()
-    setConversations(loaded)
+    dispatch({ type: 'LOAD', payload: loaded })
     setCurrentId(loadActiveId(loaded))
     hasHydratedRef.current = true
   }, [])
@@ -195,40 +260,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const getPartial = useCallback(() => partialRef.current, [])
 
-  /**
-   * 把 partial 合并到 conversations[partial.convId].messages
-   * - 找到 aiMsgId → 替换 content + sources
-   * - 找不到 → append 新 ai message
-   * 注意：使用 partial.convId，不依赖 currentId（用户可能流式中途切走）
-   */
-  const mergePartialIntoConversation = useCallback((p: StreamPartial) => {
-    setConversations((prev) =>
-      prev.map((c) => {
-        if (c.id !== p.convId) return c
-        const existingIdx = c.messages.findIndex((m) => m.id === p.aiMsgId)
-        if (existingIdx >= 0) {
-          const nextMessages = c.messages.map((m) =>
-            m.id === p.aiMsgId
-              ? { ...m, content: p.content, sources: p.sources }
-              : m,
-          )
-          return { ...c, messages: nextMessages, updatedAt: Date.now() }
-        }
-        const aiMsg: Message = {
-          id: p.aiMsgId,
-          role: 'assistant',
-          content: p.content,
-          sources: p.sources,
-          timestamp: Date.now(),
-        }
-        return { ...c, messages: [...c.messages, aiMsg], updatedAt: Date.now() }
-      }),
-    )
-  }, [])
-
   const sendMessage = useCallback(
     async (content: string, conversationId: string, options?: { existingAiMsgId?: string; skipUser?: boolean }) => {
-      if (!content.trim() || isLoading) return
+      if (!content.trim() || isLoadingRef.current) return
 
       const { existingAiMsgId, skipUser } = options ?? {}
 
@@ -242,25 +276,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       if (existingAiMsgId) {
         // continueLast: 不清空 ai 消息（保留已有 partial），不追加 user 消息
         // 新流的 token 会追加到 existingContent 后面
-        setConversations((prev) =>
-          prev.map((c) => {
-            if (c.id !== conversationId) return c
-            // 读取已有内容用于后续追加
-            const existing = c.messages.find((m) => m.id === existingAiMsgId)
-            existingContent = existing?.content ?? ''
-            if (skipUser) {
-              // continueLast: 不追加 user 消息，不修改已有 ai 消息
-              return { ...c, updatedAt: Date.now() }
-            }
+        if (skipUser) {
+          // continueLast: 不追加 user 消息，不修改已有 ai 消息
+          // 调用方（continueLast）已清空 ai 消息内容，此处 existingContent 从空开始
+          existingContent = ''
+          dispatch({ type: 'TOUCH', payload: { id: conversationId } })
+        } else {
+          const conv = conversationsRef.current.find(c => c.id === conversationId)
+          const existing = conv?.messages.find(m => m.id === existingAiMsgId)
+          existingContent = existing?.content ?? ''
+          if (conv) {
             const userMsg: Message = {
               id: Date.now().toString(),
               role: 'user',
               content,
               timestamp: Date.now(),
             }
-            return { ...c, messages: [...c.messages, userMsg], updatedAt: Date.now() }
-          }),
-        )
+            dispatch({ type: 'UPDATE_MESSAGES', payload: { convId: conversationId, messages: [...conv.messages, userMsg] } })
+          }
+        }
       } else {
         // 正常发送：创建新的 user + ai 消息对
         const userMsg: Message = {
@@ -276,21 +310,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           sources: [],
           timestamp: Date.now(),
         }
-        setConversations((prev) => {
-          const exists = prev.some((c) => c.id === conversationId)
-          const next = exists
-            ? prev
-            : [createEmptyConversationWithId(conversationId), ...prev]
-          return next.map((c) => {
-            if (c.id !== conversationId) return c
-            const isFirstUser = c.messages.length === 0
-            return {
-              ...c,
-              messages: [...c.messages, userMsg, aiMsg],
-              updatedAt: Date.now(),
-              title: isFirstUser ? getTitleFromMessages([userMsg]) : c.title,
-            }
-          })
+        const existingConv = conversationsRef.current.find(c => c.id === conversationId)
+        if (!existingConv) {
+          dispatch({ type: 'CREATE', payload: createEmptyConversationWithId(conversationId) })
+        }
+        const isFirstUser = !existingConv || existingConv.messages.length === 0
+        dispatch({
+          type: 'APPEND_USER_AI',
+          payload: { convId: conversationId, userMsg, aiMsg, isFirstUser }
         })
       }
 
@@ -340,7 +367,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             }
             setPartial(updated)
             partialRef.current = updated
-            mergePartialIntoConversation(updated)
+            dispatch({ type: 'REPLACE_MESSAGE', payload: { convId: updated.convId, aiMsgId: updated.aiMsgId, content: updated.content, sources: updated.sources } })
             subscribersRef.current.forEach((cb) => cb(updated))
           }
 
@@ -355,7 +382,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               }
               setPartial(updated)
               partialRef.current = updated
-              mergePartialIntoConversation(updated)
+              dispatch({ type: 'REPLACE_MESSAGE', payload: { convId: updated.convId, aiMsgId: updated.aiMsgId, content: updated.content, sources: updated.sources } })
               subscribersRef.current.forEach((cb) => cb(updated))
             }
           }
@@ -382,7 +409,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [isLoading, mergePartialIntoConversation],
+    [],
   )
 
   // ---- 流式控制:手动中止（用户点了 Stop 按钮，显示"重新生成"banner） ----
@@ -397,8 +424,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // 后端不支持"从断点续写"，所以 continueLast = 清空已有 partial + 重新生成。
   // 传 existingAiMsgId 让 sendMessage 更新已有 ai 消息（不创建新的消息对），
   // 避免对话里出现重复的 user 消息。
-  const conversationsRef = useRef<Conversation[]>([])
-  conversationsRef.current = conversations
 
   const continueLast = useCallback(async () => {
     const targetConvId = currentIdRef.current
@@ -410,17 +435,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (!lastUser) return
     // 清空已有 partial 内容，用同一个 aiMsgId 重新生成（不创建重复 user 消息）
     if (lastAssistant) {
-      setConversations((prev) =>
-        prev.map((c) => {
-          if (c.id !== targetConvId) return c
-          return {
-            ...c,
-            messages: c.messages.map((m) =>
-              m.id === lastAssistant.id ? { ...m, content: '', sources: [] } : m,
-            ),
-          }
-        }),
-      )
+      dispatch({
+        type: 'REPLACE_MESSAGE',
+        payload: { convId: targetConvId, aiMsgId: lastAssistant.id, content: '', sources: [] }
+      })
+      // 同步清空 partial ref（dispatch 是异步的，sendMessage 会读 partialRef/content）
+      const cleared: StreamPartial = { convId: targetConvId, aiMsgId: lastAssistant.id, content: '', sources: [] }
+      setPartial(cleared)
+      partialRef.current = cleared
     }
     await sendMessage(lastUser.content, targetConvId, {
       existingAiMsgId: lastAssistant?.id,
@@ -444,14 +466,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // ---- 对话 CRUD ----
   const createConversation = useCallback((): string => {
     const newConv = createEmptyConversation()
-    setConversations((prev) => [newConv, ...prev])
+    dispatch({ type: 'CREATE', payload: newConv })
     setCurrentId(newConv.id)
     return newConv.id
   }, [])
 
   const switchConversation = useCallback((id: string) => {
     // 不中止当前流：让流在后台继续生成，partial 内容会通过
-    // mergePartialIntoConversation 增量写入对应会话。切回时直接从
+    // dispatch REPLACE_MESSAGE 增量写入对应会话。切回时直接从
     // conversations 里读取最新状态，不打断用户体验。
     setCurrentId(id)
   }, [])
@@ -461,41 +483,27 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     if (streamingConvIdRef.current === id && abortRef.current) {
       abortRef.current.abort()
     }
-    setConversations((prev) => {
-      const next = prev.filter((c) => c.id !== id)
-      if (next.length === 0) {
-        const newConv = createEmptyConversation()
-        setCurrentId(newConv.id)
-        return [newConv]
-      }
-      // 如果删的是当前对话，切到第一个
-      if (currentIdRef.current === id) {
-        setCurrentId(next[0].id)
-      }
-      return next
-    })
+    const remaining = conversationsRef.current.filter(c => c.id !== id)
+    dispatch({ type: 'DELETE', payload: { id } })
+    if (remaining.length === 0) {
+      const newConv = createEmptyConversation()
+      dispatch({ type: 'CREATE', payload: newConv })
+      setCurrentId(newConv.id)
+    } else if (currentIdRef.current === id) {
+      setCurrentId(remaining[0].id)
+    }
   }, [])
 
   const updateMessages = useCallback((msgs: Message[]) => {
     const targetId = currentIdRef.current
     if (!targetId) return
-    setConversations((prev) =>
-      prev.map((c) => {
-        if (c.id !== targetId) return c
-        return {
-          ...c,
-          messages: msgs,
-          title: c.title === '新对话' ? getTitleFromMessages(msgs) : c.title,
-          updatedAt: Date.now(),
-        }
-      }),
-    )
+    const conv = conversationsRef.current.find(c => c.id === targetId)
+    const title = conv?.title === '新对话' ? getTitleFromMessages(msgs) : undefined
+    dispatch({ type: 'UPDATE_MESSAGES', payload: { convId: targetId, messages: msgs, title } })
   }, [])
 
   const renameConversation = useCallback((id: string, title: string) => {
-    setConversations((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, title } : c)),
-    )
+    dispatch({ type: 'RENAME', payload: { id, title } })
   }, [])
 
   // ---- 派生值 ----
