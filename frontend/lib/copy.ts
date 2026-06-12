@@ -34,3 +34,24 @@ export const CHAT = {
     DISMISS: '关闭',
   },
 } as const
+
+/** 通用状态文案(加载/空/重试) */
+export const STATE = {
+  LOADING: '加载中',
+  EMPTY: '暂无数据',
+  RETRY: '重试',
+  DISMISS: '关闭',
+} as const
+
+/** 管理端高频文案 */
+export const ADMIN = {
+  STATS: {
+    TOTAL_QUESTIONS: '题目总数',
+    CATEGORY_COUNT: '分类数',
+    LATEST_RELEVANCY: '最近评估 Answer Relevancy',
+  },
+  CATEGORIES_TITLE: '分类统计',
+  EMPTY_CATEGORIES: '暂无分类数据',
+  RETRY_STATS: '统计加载失败',
+  RETRY_EVAL: '评估概览加载失败',
+} as const

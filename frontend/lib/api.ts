@@ -187,8 +187,11 @@ export async function adminDeleteQuestion(id: string): Promise<DeleteQuestionRes
 }
 
 /** 管理端：统计 */
-export async function adminGetStats(): Promise<StatsResponse> {
-  const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: adminHeaders() })
+export async function adminGetStats(signal?: AbortSignal): Promise<StatsResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/stats`, {
+    headers: adminHeaders(),
+    signal,
+  })
   if (!res.ok) throw new Error('统计查询失败')
   return res.json()
 }
@@ -245,8 +248,11 @@ export async function adminUploadIngestFile(file: File): Promise<IngestTaskAccep
 }
 
 /** 管理端：评估汇总 */
-export async function adminGetEvalSummary(): Promise<EvalSummaryResponse> {
-  const res = await fetch(`${API_BASE}/api/admin/eval/summary`, { headers: adminHeaders() })
+export async function adminGetEvalSummary(signal?: AbortSignal): Promise<EvalSummaryResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/eval/summary`, {
+    headers: adminHeaders(),
+    signal,
+  })
   if (!res.ok) throw new Error('Failed to fetch eval summary')
   return res.json()
 }
