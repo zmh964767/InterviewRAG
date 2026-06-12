@@ -21,10 +21,16 @@ export default function Home() {
     switchConversation,
     deleteConversation,
     sendMessage,
+    abort,
   } = useChatContext()
 
   // 是否当前正在生成（后台流式不打断用户体验，但 UI 只对当前会话显示 loading/停止按钮）
   const isLoading = streamingConvId === currentId
+
+  // 停止生成：调用 context.abort() 中断当前流
+  const handleStop = useCallback(() => {
+    abort()
+  }, [abort])
 
   // 发送消息：确保有 convId → 调 sendMessage（user + 空 ai 由内部写入）
   const handleSend = useCallback(
@@ -120,7 +126,7 @@ export default function Home() {
           />
         </ErrorBoundary>
 
-        <ChatInput onSend={handleSend} isLoading={isLoading} />
+        <ChatInput onSend={handleSend} isLoading={isLoading} onStop={handleStop} />
       </div>
 
       {deleteConfirmId && (

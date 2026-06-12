@@ -38,14 +38,24 @@ export interface StreamPartial {
   sources: SourceRef[]
 }
 
+export interface ChatError {
+  kind: 'aborted' | 'error'
+  messageId: string
+  message: string
+}
+
 export interface ChatContextValue {
   // 流式状态
   isLoading: boolean
   streamingConvId: string | null
   partial: StreamPartial | null
+  lastError: ChatError | null
 
   // 流式控制
   sendMessage: (content: string, conversationId: string) => Promise<void>
+  abort: () => void
+  resendLast: () => Promise<void>
+  clearError: (messageId?: string) => void
   subscribe: (cb: (partial: StreamPartial | null) => void) => () => void
   getPartial: () => StreamPartial | null
 
@@ -128,10 +138,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const [streamingConvId, setStreamingConvId] = useState<string | null>(null)
   const [partial, setPartial] = useState<StreamPartial | null>(null)
+  const [lastError, setLastError] = useState<ChatError | null>(null)
 
   // ---- refs ----
   const abortRef = useRef<AbortController | null>(null)
-  const subscribersRef = useRef<Set<(p: StreamPartial | null) => void>>(new Set())
+  const subscribersRef = useRef<Set<(p: StreamPartial | null) => void>>(
+    new Set(),
+  )
   const partialRef = useRef<StreamPartial | null>(null)
   const currentIdRef = useRef<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -256,6 +269,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       setPartial(initial)
       partialRef.current = initial
+      // 新一轮发送,清掉上次的错误条
+      setLastError(null)
 
       setIsLoading(true)
       setStreamingConvId(conversationId)
@@ -266,7 +281,18 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let sources: SourceRef[] = []
 
       try {
-        for await (const event of queryStream(content, conversationId, [], abortRef.current?.signal)) {
+        for await (const event of queryStream(
+          content,
+          conversationId,
+          [],
+          abortRef.current?.signal,
+        )) {
+          // 中断检查：real-world 的 queryStream 会因 signal 触发而抛 AbortError,
+          // 但万一上游忘记响应 abort,我们也兜底跳过剩余事件。
+          if (abortRef.current?.signal.aborted) {
+            setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
+            return
+          }
           if (event.error) break
 
           if (event.content) {
@@ -300,35 +326,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (err) {
-        // 区分 abort（用户主动切走）和真实错误
-        const isAbort = err instanceof Error && (
-          err.name === 'AbortError' ||
-          abortRef.current?.signal.aborted
-        )
+        // 区分 abort（用户主动切走/点停止）和真实错误
+        const isAbort =
+          err instanceof Error &&
+          (err.name === 'AbortError' || abortRef.current?.signal.aborted)
         if (isAbort) {
-          // 预期中止：partial 内容已通过 mergePartialIntoConversation 增量写入。
-          // 给 partial 加「已中止」标记，让用户切回时看到"流被中断了"。
-          if (partialRef.current && partialRef.current.content) {
-            const stopped: StreamPartial = {
-              ...partialRef.current,
-              content: partialRef.current.content + '\n\n*— 已中断 —*',
-            }
-            setPartial(stopped)
-            partialRef.current = stopped
-            mergePartialIntoConversation(stopped)
-            subscribersRef.current.forEach((cb) => cb(stopped))
-          }
+          // 中断：partial 内容已通过 mergePartialIntoConversation 增量写入。
+          // 不再拼 "*— 已中断 —*"(InlineErrorBanner 是新的信号)。
+          // 用 lastError 记录中断,绑定到这条 ai 消息。
+          setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
           return
         }
-        const errMsg = err instanceof Error ? err.message : '未知'
-        const errored: StreamPartial = {
-          ...(partialRef.current ?? initial),
-          content: fullContent + `\n\n[错误: ${errMsg}]`,
-        }
-        setPartial(errored)
-        partialRef.current = errored
-        mergePartialIntoConversation(errored)
-        subscribersRef.current.forEach((cb) => cb(errored))
+        // 真实错误:保留已流到一半的 partial,不在内容里拼接 "[错误: ...]"
+        // 用 lastError 承载,InlineErrorBanner 渲染
+        const errMsg = err instanceof Error ? err.message : '未知错误'
+        setLastError({ kind: 'error', messageId: aiMsgId, message: errMsg })
       } finally {
         setIsLoading(false)
         setStreamingConvId(null)
@@ -336,6 +348,40 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     },
     [isLoading, mergePartialIntoConversation],
   )
+
+  // ---- 流式控制:手动中止 ----
+  const abort = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+    }
+  }, [])
+
+  // ---- 流式控制:重发上轮 query ----
+  const conversationsRef = useRef<Conversation[]>([])
+  conversationsRef.current = conversations
+
+  const resendLast = useCallback(async () => {
+    const targetConvId = currentIdRef.current
+    if (!targetConvId) return
+    const conv = conversationsRef.current.find((c) => c.id === targetConvId)
+    if (!conv) return
+    const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
+    if (!lastUser) return
+    await sendMessage(lastUser.content, targetConvId)
+  }, [sendMessage])
+
+  // streamingConvIdRef for deleteConversation
+  const streamingConvIdRef = useRef<string | null>(null)
+  streamingConvIdRef.current = streamingConvId
+
+  // ---- 清除错误(InlineErrorBanner 的"关闭"按钮调用) ----
+  const clearError = useCallback((messageId?: string) => {
+    setLastError((prev) => {
+      if (!prev) return prev
+      if (messageId && prev.messageId !== messageId) return prev
+      return null
+    })
+  }, [])
 
   // ---- 对话 CRUD ----
   const createConversation = useCallback((): string => {
@@ -346,13 +392,19 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchConversation = useCallback((id: string) => {
-    // 不中止当前流：让流在后台继续生成，partial 内容会通过
-    // mergePartialIntoConversation 增量写入对应会话。切回时直接从
-    // conversations 里读取最新状态，不打断用户体验。
+    // 若当前正在流(无论切走/切回),先 abort 让旧流停止,避免后台继续吃 token
+    if (abortRef.current) {
+      abortRef.current.abort()
+    }
+    setLastError(null)
     setCurrentId(id)
   }, [])
 
   const deleteConversation = useCallback((id: string) => {
+    // 如果删的是当前正在流的对话,先 abort
+    if (streamingConvIdRef.current === id && abortRef.current) {
+      abortRef.current.abort()
+    }
     setConversations((prev) => {
       const next = prev.filter((c) => c.id !== id)
       if (next.length === 0) {
@@ -401,7 +453,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     isLoading,
     streamingConvId,
     partial,
+    lastError,
     sendMessage,
+    abort,
+    resendLast,
+    clearError,
     subscribe,
     getPartial,
     conversations,

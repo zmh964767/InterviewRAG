@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react'
 import type { Message } from '@/lib/types'
 import { ChatMessage } from './ChatMessage'
+import { useChatContext } from '@/contexts/ChatContext'
 
 interface ChatHistoryProps {
   messages: Message[]
@@ -16,6 +17,7 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
   const containerRef = useRef<HTMLDivElement>(null)
   const prevLenRef = useRef(messages.length)
   const mountedRef = useRef(false)
+  const { lastError, clearError } = useChatContext()
 
   // 滚动策略：
   // - 首次挂载（路由恢复）→ 滚到底部（用户回到对话时看到最新消息）
@@ -144,12 +146,25 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
       <div className="max-w-3xl mx-auto px-6 py-8">
         {messages.map((message, index) => {
           const isLastAssistant = message.role === 'assistant' && index === messages.length - 1
+          // InlineErrorBanner 挂载到出错的 assistant 消息上
+          const messageError =
+            lastError && message.id === lastError.messageId && message.role === 'assistant'
+              ? { kind: lastError.kind, message: lastError.message }
+              : null
           return (
             <ChatMessage
               key={message.id}
               message={message}
               isStreaming={isLastAssistant && isLoading}
               onRegenerate={isLastAssistant ? onRegenerate : undefined}
+              error={messageError}
+              onDismissError={
+                messageError
+                  ? () => {
+                      clearError(message.id)
+                    }
+                  : undefined
+              }
             />
           )
         })}

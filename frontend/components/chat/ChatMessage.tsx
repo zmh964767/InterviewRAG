@@ -7,14 +7,23 @@ import rehypeHighlight from 'rehype-highlight'
 import 'highlight.js/styles/github-dark.css'
 import type { Message } from '@/lib/types'
 import { SourceCard } from '@/components/sources/SourceCard'
+import { InlineErrorBanner } from './InlineErrorBanner'
 
 interface ChatMessageProps {
   message: Message
   isStreaming?: boolean
   onRegenerate?: () => void
+  error?: { kind: 'aborted' | 'error'; message: string } | null
+  onDismissError?: () => void
 }
 
-export function ChatMessage({ message, isStreaming, onRegenerate }: ChatMessageProps) {
+export function ChatMessage({
+  message,
+  isStreaming,
+  onRegenerate,
+  error,
+  onDismissError,
+}: ChatMessageProps) {
   const [showSources, setShowSources] = useState(true)
   const [copied, setCopied] = useState(false)
   const isUser = message.role === 'user'
@@ -86,8 +95,18 @@ export function ChatMessage({ message, isStreaming, onRegenerate }: ChatMessageP
           )}
         </div>
 
+        {/* Inline error banner (assistant messages only) */}
+        {!isUser && error && onDismissError && (
+          <InlineErrorBanner
+            kind={error.kind}
+            message={error.message}
+            onRetry={onRegenerate}
+            onDismiss={onDismissError}
+          />
+        )}
+
         {/* Actions (assistant messages only) */}
-        {!isUser && message.content && !isStreaming && (
+        {!isUser && message.content && !isStreaming && !error && (
           <div className="flex items-center gap-1 mt-2">
             <button
               onClick={handleCopy}

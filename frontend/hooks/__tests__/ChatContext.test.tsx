@@ -390,7 +390,7 @@ describe('ChatContext - 流式 partial 同步', () => {
     expect(conv.messages[1].content).toBe('ABC')
   })
 
-  test('partial 使用 partial.convId 而非 currentId（用户流式切走时）', async () => {
+  test('切对话中断当前流：旧流 abort，旧对话的 ai 消息停在切走时的 content', async () => {
     // Defer the stream by yielding one chunk at a time manually.
     let resolveNext: (() => void) | null = null
     const stream = (async function* () {
@@ -429,26 +429,31 @@ describe('ChatContext - 流式 partial 同步', () => {
       expect(convAState?.messages[1]?.content).toBe('first')
     })
 
-    // Switch to convB mid-stream
+    // Switch to convB mid-stream -> must abort the old stream
     act(() => {
       result.current.switchConversation(convB)
     })
     expect(result.current.currentId).toBe(convB)
 
-    // Release the next chunk
+    // Release the next chunk (should be ignored by the aborted stream)
     await act(async () => {
       resolveNext!()
       await sendPromise
     })
 
-    // After stream finishes, convA's ai message should have the full content.
-    // Critical: even though currentId is convB, the stream's partial.convId
-    // (which is convA) is what gets written.
+    // After switch + abort, convA's ai message content STAYS at 'first' —
+    // the ' second' chunk is never written because the old stream was aborted.
     const convAAfter = result.current.conversations.find((c) => c.id === convA)!
-    expect(convAAfter.messages[1].content).toBe('first second')
+    expect(convAAfter.messages[1].content).toBe('first')
+
     // convB should be untouched
     const convBAfter = result.current.conversations.find((c) => c.id === convB)!
     expect(convBAfter.messages).toEqual([])
+
+    // lastError should be set with kind 'aborted' and bound to convA's ai message
+    expect(result.current.lastError).not.toBeNull()
+    expect(result.current.lastError?.kind).toBe('aborted')
+    expect(result.current.lastError?.messageId).toBe(convAAfter.messages[1].id)
   })
 
   test('流完成 -> partial 保留为最后一个值（不重置为 null）', async () => {
@@ -544,6 +549,133 @@ describe('ChatContext - 流式 partial 同步', () => {
     const p = result.current.getPartial()
     expect(p).not.toBeNull()
     expect(p?.content).toBe('P1P2')
+  })
+
+  test('abort() 中断流：partial 停留在中断时的内容 + lastError.kind === "aborted"', async () => {
+    let resolveNext: (() => void) | null = null
+    const stream = (async function* () {
+      yield { content: 'partial-' } as StreamEvent
+      await new Promise<void>((r) => {
+        resolveNext = r
+      })
+      yield { content: 'after-stop' } as StreamEvent
+      yield { done: true, sources: [] } as StreamEvent
+    })()
+    queryStreamMock.mockImplementation(() => stream)
+
+    const { result } = renderHook(() => useChatContext(), { wrapper: makeWrapper() })
+
+    let convId = ''
+    act(() => {
+      convId = result.current.createConversation()
+    })
+
+    let sendPromise: Promise<void> = Promise.resolve()
+    act(() => {
+      sendPromise = result.current.sendMessage('q', convId)
+    })
+
+    // Wait for the first chunk to arrive
+    await waitFor(() => {
+      const conv = result.current.conversations.find((c) => c.id === convId)
+      expect(conv?.messages[1]?.content).toBe('partial-')
+    })
+
+    // User clicks Stop
+    act(() => {
+      result.current.abort()
+    })
+
+    // Release the next chunk (will arrive but the consumer is aborted)
+    await act(async () => {
+      resolveNext!()
+      await sendPromise
+    })
+
+    // isLoading is back to false
+    expect(result.current.isLoading).toBe(false)
+
+    // Partial content stays at 'partial-' (the 'after-stop' chunk must not be appended)
+    const convAfter = result.current.conversations.find((c) => c.id === convId)!
+    expect(convAfter.messages[1].content).toBe('partial-')
+
+    // lastError reflects the abort
+    expect(result.current.lastError).not.toBeNull()
+    expect(result.current.lastError?.kind).toBe('aborted')
+    expect(result.current.lastError?.messageId).toBe(convAfter.messages[1].id)
+  })
+
+  test('流式错误:lastError.kind === "error" 且 message content 不再被 [错误: ...] 污染', async () => {
+    queryStreamMock.mockImplementation(() =>
+      makeStream([
+        { content: 'halfway' },
+        // simulate a stream error: throw from the generator
+        // (the for-await will propagate this as a real error)
+      ] as Array<Partial<StreamEvent>>),
+    )
+    // Wrap the generator so the second yield throws
+    queryStreamMock.mockImplementationOnce(async function* () {
+      yield { content: 'halfway' } as StreamEvent
+      throw new Error('网络中断')
+    })
+
+    const { result } = renderHook(() => useChatContext(), { wrapper: makeWrapper() })
+
+    let convId = ''
+    act(() => {
+      convId = result.current.createConversation()
+    })
+
+    await act(async () => {
+      await result.current.sendMessage('q', convId)
+    })
+
+    // Partial content must NOT be polluted with "[错误: ...]"
+    const conv = result.current.conversations.find((c) => c.id === convId)!
+    expect(conv.messages[1].content).toBe('halfway')
+    expect(conv.messages[1].content).not.toContain('[错误:')
+    expect(conv.messages[1].content).not.toContain('网络中断')
+
+    // lastError is set with kind 'error' and the error message
+    expect(result.current.lastError).not.toBeNull()
+    expect(result.current.lastError?.kind).toBe('error')
+    expect(result.current.lastError?.message).toBe('网络中断')
+    expect(result.current.lastError?.messageId).toBe(conv.messages[1].id)
+  })
+
+  test('resendLast() 重新发送当前对话的最后一条 user 消息', async () => {
+    let sendCount = 0
+    queryStreamMock.mockImplementation(() => {
+      sendCount += 1
+      return makeStream([{ content: 'reply' }, { done: true, sources: [] }])
+    })
+
+    const { result } = renderHook(() => useChatContext(), { wrapper: makeWrapper() })
+
+    let convId = ''
+    act(() => {
+      convId = result.current.createConversation()
+    })
+
+    // First send
+    await act(async () => {
+      await result.current.sendMessage('first question', convId)
+    })
+    expect(sendCount).toBe(1)
+    expect(result.current.conversations[0].messages).toHaveLength(2)
+
+    // resendLast should re-send the user message
+    await act(async () => {
+      await result.current.resendLast()
+    })
+    expect(sendCount).toBe(2)
+
+    // Now there should be 4 messages: user, assistant, user (resent), assistant (resent)
+    const conv = result.current.conversations.find((c) => c.id === convId)!
+    expect(conv.messages).toHaveLength(4)
+    expect(conv.messages[2].role).toBe('user')
+    expect(conv.messages[2].content).toBe('first question')
+    expect(conv.messages[3].role).toBe('assistant')
   })
 })
 
