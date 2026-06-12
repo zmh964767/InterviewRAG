@@ -218,9 +218,9 @@ python -m evaluation.sweep
 | 方向 | 说明 | 预估工作量 |
 |---|---|---|
 | **Docker 部署** | Dockerfile + docker-compose（前端 + 后端 + ChromaDB），一键启动 | 1 天 |
-| **流式性能优化** | `mergePartialIntoConversation` 每 token 全数组重建 → 改用 `useReducer` + 选择性订阅；react-markdown 逐 token 重解析 → 缓存已渲染段落 | 1-2 天 |
+| ~~**流式性能优化**~~ | ~~`mergePartialIntoConversation` 每 token 全数组重建 → 改用 `useReducer`；react-markdown 逐 token 重解析 → 50ms 节流~~ ✅ | ~~1-2 天~~ |
 | **后端单测补全** | `services/` + `api/` 单测覆盖率补齐（当前只有前端 23 个单测） | 1 天 |
-| **知识库批量操作** | 多选 + 批量删除 + 批量导入 | 1 天 |
+| ~~**知识库批量操作**~~ | ~~多选 + 批量删除 + 批量导入~~ ✅ | ~~1 天~~ |
 
 ### 中优先级
 
