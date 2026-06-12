@@ -14,6 +14,15 @@ import type { EvalSummaryResponse, EvalDetailResponse } from '@/lib/types'
 
 type Tab = 'overview' | 'items' | 'history' | 'compare' | 'sweep'
 
+/** 管理页 tab 注册表:用 `as const` 保证字面量类型,IDE 可补全 */
+const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
+  { key: 'overview', label: '概览' },
+  { key: 'items', label: '题目详情' },
+  { key: 'history', label: EVAL.HISTORY_TITLE },
+  { key: 'compare', label: '对比' },
+  { key: 'sweep', label: 'Sweep' },
+] as const
+
 export default function AdminEvalPage() {
   const [summary, setSummary] = useState<EvalSummaryResponse | null>(null)
   const [latestDetail, setLatestDetail] = useState<EvalDetailResponse | null>(null)
@@ -81,28 +90,22 @@ export default function AdminEvalPage() {
 
       {/* Tabs */}
       <div className="px-6 pt-3 flex gap-1 border-b" style={{ borderColor: 'var(--border)' }}>
-        {([
-          ['overview', '概览'],
-          ['items', '题目详情'],
-          ['history', EVAL.HISTORY_TITLE],
-          ['compare', '对比'],
-          ['sweep', 'Sweep'],
-        ] as [Tab, string][]).map(([key, label]) => (
+        {TABS.map((t) => (
           <button
-            key={key}
-            onClick={() => setTab(key)}
+            key={t.key}
+            onClick={() => setTab(t.key)}
             className="px-4 py-2 text-sm rounded-t-lg"
             style={{
-              background: tab === key ? 'var(--paper)' : 'transparent',
-              color: tab === key ? 'var(--ink)' : 'var(--ink-muted)',
-              borderBottom: tab === key ? '2px solid var(--ink)' : '2px solid transparent',
+              background: tab === t.key ? 'var(--paper)' : 'transparent',
+              color: tab === t.key ? 'var(--ink)' : 'var(--ink-muted)',
+              borderBottom: tab === t.key ? '2px solid var(--ink)' : '2px solid transparent',
             }}
           >
-            {label}
-            {key === 'items' && sortedItems.length > 0 && (
+            {t.label}
+            {t.key === 'items' && sortedItems.length > 0 && (
               <span className="ml-1.5 text-xs" style={{ color: 'var(--ink-muted)' }}>({sortedItems.length})</span>
             )}
-            {key === 'history' && (summary?.history.length ?? 0) > 0 && (
+            {t.key === 'history' && (summary?.history.length ?? 0) > 0 && (
               <span className="ml-1.5 text-xs" style={{ color: 'var(--ink-muted)' }}>({summary?.history.length})</span>
             )}
           </button>
