@@ -20,7 +20,10 @@ import type {
   SweepResponse,
 } from './types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
+// TODO(2026-06-13): 8080 端口被已死 PID 21616 持有 zombie socket,内核未释放。
+// 临时改用 8081 跑新后端(zombie 释放后改回 8080)。
+// 验证:http://localhost:8081/openapi.json 应有 7 个 /api/admin/eval/* 端点
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8081'
 
 /** 普通查询 */
 export async function query(request: QueryRequest): Promise<QueryResponse> {
