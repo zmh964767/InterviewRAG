@@ -167,3 +167,82 @@ class TestEvalSweepEndpoint:
         """无 admin token 返回 401"""
         res = client.get("/api/admin/eval/sweep")
         assert res.status_code in (401, 403)
+
+    # ---- baseline_e_hr5 动态读取 ----
+
+    def test_sweep_baseline_from_latest_summary(self, client, admin_headers, fake_results_dir):
+        """写 latest_summary.json,验证 baseline 字段被读取"""
+        from app.api import admin_eval
+
+        # context_precision 优先(白名单),期望返回 0.88
+        (fake_results_dir / "latest_summary.json").write_text(
+            json.dumps({
+                "metrics": {
+                    "context_precision": 0.88,
+                    "faithfulness": 0.50,
+                    "answer_relevancy": 0.60,
+                    "context_recall": 0.70,
+                },
+                "total": 17,
+                "error_count": 0,
+            }),
+            encoding="utf-8",
+        )
+
+        res = client.get("/api/admin/eval/sweep", headers=admin_headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["baseline_e_hr5"] == pytest.approx(0.88, abs=1e-6)
+
+    def test_sweep_baseline_zero_when_missing(self, client, admin_headers, fake_results_dir):
+        """latest_summary.json 不存在时 baseline=0.0"""
+        from app.api import admin_eval
+
+        # 确保 fake_results_dir 下没有 latest_summary.json
+        latest_path = fake_results_dir / "latest_summary.json"
+        if latest_path.exists():
+            latest_path.unlink()
+
+        res = client.get("/api/admin/eval/sweep", headers=admin_headers)
+        assert res.status_code == 200
+        data = res.json()
+        assert data["baseline_e_hr5"] == 0.0
+        # rows / winner 仍正常返回
+        assert len(data["rows"]) == 9
+        assert data["winner"] is not None
+
+    def test_sweep_baseline_fallback_chain(self, client, admin_headers, fake_results_dir):
+        """字段缺失时按 fallback 链降级"""
+        from app.api import admin_eval
+
+        # 1) 只有 faithfulness(无 context_precision) → 取 faithfulness
+        (fake_results_dir / "latest_summary.json").write_text(
+            json.dumps({
+                "metrics": {"faithfulness": 0.42, "answer_relevancy": 0.33},
+                "total": 5,
+            }),
+            encoding="utf-8",
+        )
+        res = client.get("/api/admin/eval/sweep", headers=admin_headers)
+        assert res.json()["baseline_e_hr5"] == pytest.approx(0.42, abs=1e-6)
+
+        # 2) 白名单都缺,只有 answer_relevancy → 取第一个非 0 字段
+        (fake_results_dir / "latest_summary.json").write_text(
+            json.dumps({"metrics": {"answer_relevancy": 0.55}, "total": 5}),
+            encoding="utf-8",
+        )
+        res = client.get("/api/admin/eval/sweep", headers=admin_headers)
+        assert res.json()["baseline_e_hr5"] == pytest.approx(0.55, abs=1e-6)
+
+        # 3) metrics 完全空 / 没有有效值 → 0.0
+        (fake_results_dir / "latest_summary.json").write_text(
+            json.dumps({"metrics": {}, "total": 0}),
+            encoding="utf-8",
+        )
+        res = client.get("/api/admin/eval/sweep", headers=admin_headers)
+        assert res.json()["baseline_e_hr5"] == 0.0
+
+        # 4) JSON 损坏 → 0.0(不抛异常)
+        (fake_results_dir / "latest_summary.json").write_text("not-valid-json", encoding="utf-8")
+        res = client.get("/api/admin/eval/sweep", headers=admin_headers)
+        assert res.json()["baseline_e_hr5"] == 0.0

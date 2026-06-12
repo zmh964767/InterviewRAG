@@ -216,6 +216,43 @@ async def list_eval_tasks():
 _SWEEP_PROMPT_VARIANTS = (1, 2, 3, 4, 5)
 _SWEEP_CHUNK_SIZES = (200, 500, 800, 1200)
 
+# 从 latest_summary.json 取 baseline 时的 fallback 链
+# 优先级:context_precision > faithfulness > 第一个非 0 字段 > 0.0
+_BASELINE_METRIC_PREFERENCE = ("context_precision", "faithfulness")
+
+
+def _read_sweep_baseline(results_dir: Path) -> float:
+    """从 latest_summary.json 读基准 E_hr5(优雅降级,失败返回 0.0)
+
+    实际拿的是 latest_summary["metrics"] 里的某个 RAGAS 指标值(0..1)作为
+    提升百分比的基准。fallback 链:
+      1. context_precision
+      2. faithfulness
+      3. 第一个非 0 字段
+      4. 0.0
+    文件不存在 / 字段缺失 / JSON 损坏 → 0.0(不抛异常)
+    """
+    latest_path = results_dir / "latest_summary.json"
+    if not latest_path.exists():
+        return 0.0
+    try:
+        data = json.loads(latest_path.read_text(encoding="utf-8"))
+    except Exception:
+        return 0.0
+    metrics = (data or {}).get("metrics") or {}
+    if not isinstance(metrics, dict):
+        return 0.0
+    # 优先按白名单字段查
+    for key in _BASELINE_METRIC_PREFERENCE:
+        v = metrics.get(key)
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+    # fallback:第一个非 0 数值字段
+    for v in metrics.values():
+        if isinstance(v, (int, float)) and v > 0:
+            return float(v)
+    return 0.0
+
 
 @router.get("/eval/sweep")
 async def eval_sweep():
@@ -230,7 +267,7 @@ async def eval_sweep():
 
     sweep_dir = RESULTS_DIR / "sweep"
     if not sweep_dir.is_dir():
-        return SweepResponse(rows=[], winner=None)
+        return SweepResponse(rows=[], winner=None, baseline_e_hr5=_read_sweep_baseline(RESULTS_DIR))
 
     rows: list[SweepRow] = []
 
@@ -281,7 +318,11 @@ async def eval_sweep():
         ))
 
     winner = max(rows, key=lambda r: r.E_hr5) if rows else None
-    return SweepResponse(rows=rows, winner=winner)
+    return SweepResponse(
+        rows=rows,
+        winner=winner,
+        baseline_e_hr5=_read_sweep_baseline(RESULTS_DIR),
+    )
 
 
 async def _run_eval_task(task_id: str, mode: str) -> None:

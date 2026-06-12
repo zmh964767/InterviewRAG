@@ -188,3 +188,4 @@ class SweepResponse(BaseModel):
     """sweep 全部组合 + winner"""
     rows: list[SweepRow] = Field(default_factory=list, description="所有 sweep 组合,按文件读取顺序")
     winner: SweepRow | None = Field(default=None, description="E_hr5 最高的组合")
+    baseline_e_hr5: float = Field(default=0.0, description="最新评估汇总里的基准 E_hr5(从 latest_summary.json 动态读,文件/字段缺失时为 0.0)")
