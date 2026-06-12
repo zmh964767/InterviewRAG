@@ -120,12 +120,8 @@ def main() -> int:
     # 7. 持久化
     if aggregated:
         save_results(
-            {
-                "aggregated": aggregated,
-                "errors": errors,
-                "total": total,
-                "comparison": comparison_results or {},
-            },
+            ragas_summary,
+            comparison_results or {},
             results_dir,
         )
         logger.info(f"结果已保存: {results_dir / 'latest.json'}")

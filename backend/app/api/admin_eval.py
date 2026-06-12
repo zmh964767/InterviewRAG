@@ -15,20 +15,22 @@ from app.api.deps_admin import require_admin
 router = APIRouter(dependencies=[Depends(require_admin)])
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "evaluation" / "results"
-_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}$")
+_TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}[-:]\d{2}[-:]\d{2}$")
 
 
 def _normalize_history_item(data: dict, filename: str) -> dict:
     stem = filename.removesuffix(".json")
+    # 文件名是 "2026-06-08T23-26-02" 短横线格式
     parts = stem.split("T", 1)
     if len(parts) == 2:
-        time_part = parts[1].replace("-", ":")
-        ts = f"{parts[0]}T{time_part}"
+        ts = f"{parts[0]}T{parts[1]}"  # 保持短横线
     else:
         ts = stem
+    # 加上 timestamp 字段（如果数据里有）
+    timestamp = data.get("timestamp", ts)
     return {
         "metrics": data.get("aggregated", {}),
-        "timestamp": ts,
+        "timestamp": timestamp,
         "total": data.get("total", 0),
         "error_count": len(data.get("errors", [])),
     }

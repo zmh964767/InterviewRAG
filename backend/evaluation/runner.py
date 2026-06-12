@@ -17,6 +17,8 @@ class EvalResult:
     """单题评估结果"""
     id: str
     success: bool
+    question: str = ""
+    answer: str = ""
     metrics: dict = field(default_factory=dict)
     error: str | None = None
 
@@ -123,19 +125,23 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
     }
     successful_ids: list[str] = []
     errors: list[str] = []
+    answers_map: dict[str, str] = {}
 
     for item in items:
         try:
             result = await rag.query(item["question"])
+            rag_answer = result.get("answer", "")
             ragas_data["question"].append(item["question"])
-            ragas_data["answer"].append(result.get("answer", ""))
+            ragas_data["answer"].append(rag_answer)
             contexts = [
                 f"{s.get('question', '')}\n{s.get('answer', '')}"
                 for s in result.get("sources", [])
             ]
             ragas_data["contexts"].append(contexts)
             ragas_data["ground_truth"].append(item["ground_truth"])
-            successful_ids.append(item.get("id", item["question"][:8]))
+            item_id = item.get("id", item["question"][:8])
+            successful_ids.append(item_id)
+            answers_map[item_id] = rag_answer
         except Exception as e:
             logger.error(f"题目 {item.get('id', '?')} RAG 失败: {e}")
             errors.append(item.get("id", "unknown"))
@@ -226,7 +232,9 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
         )
 
     # 3. 构造 results（每题一个 stub 成功结果）
-    results = [EvalResult(id=i, success=True, metrics={}) for i in successful_ids]
+    # Build id→question map for filling
+    q_map = {item["id"]: item["question"] for item in items}
+    results = [EvalResult(id=i, success=True, question=q_map.get(i, ""), answer=answers_map.get(i, ""), metrics={}) for i in successful_ids]
     results += [EvalResult(id=e, success=False) for e in errors]
 
     return EvalSummary(

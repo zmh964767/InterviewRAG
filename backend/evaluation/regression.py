@@ -11,23 +11,50 @@ from pathlib import Path
 REGRESSION_THRESHOLD = 0.05  # 5% 波动阈值
 
 
-def save_results(summary_dict: dict, results_dir: Path) -> None:
+def save_results(summary, comparison: dict, results_dir: Path) -> None:
     """保存结果到 latest.json + history/<timestamp>.json
 
     每次运行都会把上次的 latest.json 备份到 history/，再写新的 latest.json。
     """
+    from dataclasses import asdict, is_dataclass
     results_dir.mkdir(parents=True, exist_ok=True)
     history_dir = results_dir / "history"
     history_dir.mkdir(exist_ok=True)
 
+    # 兼容 dict 和 EvalSummary dataclass
+    if is_dataclass(summary):
+        summary_dict = asdict(summary)
+    else:
+        summary_dict = summary
+
+    ts = datetime.now().isoformat(timespec="seconds").replace(":", "-")
+
     latest_path = results_dir / "latest.json"
     if latest_path.exists():
-        ts = datetime.now().isoformat(timespec="seconds").replace(":", "-")
         backup = history_dir / f"{ts}.json"
         shutil.copy2(latest_path, backup)
 
+    # 构造完整 payload（含 items 详情）
+    items = summary_dict.get("results", [])
+    payload = {
+        "timestamp": ts,
+        "aggregated": summary_dict.get("aggregated", {}),
+        "errors": summary_dict.get("errors", []),
+        "total": len(items),
+        "items": [
+            {
+                "id": r["id"],
+                "question": r.get("question", ""),
+                "answer": r.get("answer", ""),
+                "metrics": r.get("metrics", {}),
+                "error": r.get("error"),
+            }
+            for r in items
+        ],
+        "comparison": comparison,
+    }
     latest_path.write_text(
-        json.dumps(summary_dict, ensure_ascii=False, indent=2),
+        json.dumps(payload, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
@@ -35,7 +62,7 @@ def save_results(summary_dict: dict, results_dir: Path) -> None:
     summary_only = {
         "metrics": summary_dict.get("aggregated", {}),
         "error_count": len(summary_dict.get("errors", [])),
-        "total": summary_dict.get("total", 0),
+        "total": len(items),
         "timestamp": datetime.now().isoformat(),
     }
     summary_path.write_text(

@@ -146,40 +146,40 @@ class TestRegression:
         assert changes == []
 
     def test_no_regression(self, tmp_path):
-        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, tmp_path)
+        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, {}, tmp_path)
         changes = check_regression({"faithfulness": 0.82}, tmp_path)
         assert len(changes) == 1
         assert changes[0]["regression"] is False
         assert changes[0]["improvement"] is False
 
     def test_regression_detected(self, tmp_path):
-        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, tmp_path)
+        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, {}, tmp_path)
         changes = check_regression({"faithfulness": 0.7}, tmp_path)
         assert changes[0]["regression"] is True
         assert changes[0]["improvement"] is False
 
     def test_improvement_detected(self, tmp_path):
-        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, tmp_path)
+        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, {}, tmp_path)
         changes = check_regression({"faithfulness": 0.9}, tmp_path)
         assert changes[0]["regression"] is False
         assert changes[0]["improvement"] is True
 
     def test_within_threshold(self, tmp_path):
         # 波动 < 5% → 不算回归也不算提升
-        save_results({"aggregated": {"faithfulness": 0.80}, "errors": [], "total": 1}, tmp_path)
+        save_results({"aggregated": {"faithfulness": 0.80}, "errors": [], "total": 1}, {}, tmp_path)
         changes = check_regression({"faithfulness": 0.82}, tmp_path)
         assert changes[0]["regression"] is False
         assert changes[0]["improvement"] is False
 
     def test_missing_metric_ignored(self, tmp_path):
-        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, tmp_path)
+        save_results({"aggregated": {"faithfulness": 0.8}, "errors": [], "total": 1}, {}, tmp_path)
         changes = check_regression({"answer_relevancy": 0.5}, tmp_path)
         # 旧结果没这个 metric → 跳过
         assert changes == []
 
     def test_save_creates_history(self, tmp_path):
-        save_results({"aggregated": {"f": 0.8}, "errors": [], "total": 1}, tmp_path)
-        save_results({"aggregated": {"f": 0.9}, "errors": [], "total": 1}, tmp_path)
+        save_results({"aggregated": {"f": 0.8}, "errors": [], "total": 1}, {}, tmp_path)
+        save_results({"aggregated": {"f": 0.9}, "errors": [], "total": 1}, {}, tmp_path)
         history = list((tmp_path / "history").glob("*.json"))
         assert len(history) == 1  # 第一次的备份
         assert (tmp_path / "latest.json").exists()
