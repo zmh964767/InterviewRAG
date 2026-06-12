@@ -5,12 +5,13 @@ import { RagMetricsBar } from '@/components/eval/RagMetricsBar'
 import { ComparisonTable } from '@/components/eval/ComparisonTable'
 import { EvalItemRow } from '@/components/eval/EvalItemRow'
 import { RunEvalButton } from '@/components/eval/RunEvalButton'
+import { EvalCompareView } from '@/components/eval/EvalCompareView'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { adminGetEvalSummary, adminGetEvalDetail } from '@/lib/api'
 import { EVAL } from '@/lib/copy'
 import type { EvalSummaryResponse, EvalDetailResponse } from '@/lib/types'
 
-type Tab = 'overview' | 'items' | 'history'
+type Tab = 'overview' | 'items' | 'history' | 'compare'
 
 export default function AdminEvalPage() {
   const [summary, setSummary] = useState<EvalSummaryResponse | null>(null)
@@ -83,6 +84,7 @@ export default function AdminEvalPage() {
           ['overview', '概览'],
           ['items', '题目详情'],
           ['history', EVAL.HISTORY_TITLE],
+          ['compare', '对比'],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -224,6 +226,18 @@ export default function AdminEvalPage() {
               </div>
             ) : (
               <p className="text-center py-12 text-sm" style={{ color: 'var(--ink-muted)' }}>暂无历史快照</p>
+            )}
+          </div>
+        )}
+
+        {tab === 'compare' && (
+          <div>
+            {!summary ? (
+              <p className="text-center py-12 text-sm" style={{ color: 'var(--ink-muted)' }}>加载中…</p>
+            ) : !summary.latest && summary.history.length === 0 ? (
+              <p className="text-center py-12 text-sm" style={{ color: 'var(--ink-muted)' }}>暂无评估快照,请先运行评估</p>
+            ) : (
+              <EvalCompareView history={summary.history} latest={summary.latest} />
             )}
           </div>
         )}

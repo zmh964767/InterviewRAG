@@ -16,6 +16,7 @@ import type {
   IngestTaskAccepted,
   EvalSummaryResponse,
   EvalDetailResponse,
+  CompareResponse,
 } from './types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
@@ -295,6 +296,24 @@ export async function adminGetEvalDetail(ts?: string): Promise<EvalDetailRespons
     : `${API_BASE}/api/admin/eval/detail`
   const res = await fetch(url, { headers: adminHeaders() })
   if (!res.ok) throw new Error('Failed to fetch eval detail')
+  return res.json()
+}
+
+/** 管理端：对比两个评估快照的 RAGAS 指标 */
+export async function adminCompareEval(
+  base: string,
+  target: string,
+  signal?: AbortSignal
+): Promise<CompareResponse> {
+  const params = new URLSearchParams({ base, target })
+  const res = await fetch(`${API_BASE}/api/admin/eval/compare?${params}`, {
+    headers: adminHeaders(),
+    signal,
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '对比失败' }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
   return res.json()
 }
 

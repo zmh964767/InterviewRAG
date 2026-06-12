@@ -195,3 +195,37 @@ export interface RunEvalRequest {
 export interface RunEvalResponse {
   task_id: string
 }
+
+// =========================================================================
+// 评估快照对比
+// =========================================================================
+
+/** 方向类型 */
+export type MetricDirection = 'up' | 'down' | 'same'
+
+/** 单个指标的 base/target 对比 */
+export interface MetricDiff {
+  name: 'faithfulness' | 'answer_relevancy' | 'context_precision' | 'context_recall'
+  base: number
+  target: number
+  change: number
+  direction: MetricDirection
+}
+
+/** 快照元信息(用于 base/target 选择器) */
+export interface CompareSnapshotInfo {
+  timestamp: string
+  total: number
+  error_count: number
+  metrics: EvalMetrics
+}
+
+/** /api/admin/eval/compare 响应 */
+export interface CompareResponse {
+  base: CompareSnapshotInfo
+  target: CompareSnapshotInfo
+  diffs: MetricDiff[]
+  improved: number
+  regressed: number
+  same: number
+}
