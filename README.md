@@ -9,11 +9,13 @@
 - **多数据源采集**：MD 解析 + 网页爬虫 + PDF 解析
 - **多轮对话**：支持上下文记忆的连续追问
 - **流式输出**：SSE 实时返回答案，首字延迟 < 1s
+- **流式控制**：停止/重新生成，切对话时流后台继续
 - **代码语法高亮**：highlight.js + github-dark 主题，Python/JS/JSON 等 190+ 种语言
 - **RAGAS 评估**：Faithfulness、Relevancy、Precision、Recall 四项指标
-- **评估报告 Web UI**：`/admin/eval` 页面展示最新指标 + 历史快照（无需终端 `cat report.md`）
+- **评估报告 Web UI**：`/admin/eval` 页面展示最新指标 + 历史快照
 - **对比实验**：四种检索策略效果对比
-- **代码质量**：ESLint 8 + Next.js TypeScript 规则，0 warnings
+- **骨架屏加载**：列表/报告加载时显示 shimmer 占位
+- **无障碍**：focus-visible ring + Modal 焦点陷阱 + skip link + prefers-reduced-motion
 - **双端架构**：用户端（匿名访问问答 + 题目库只读）+ 管理端（JWT 鉴权的知识库/评估后台）
 
 ## 🏗️ 技术栈
@@ -52,14 +54,16 @@ InterviewRAG/
 ├── frontend/
 │   ├── app/              # Next.js 页面（/ /questions /admin/*）
 │   ├── components/       # React 组件
-│   │   ├── chat/         # 对话组件（ChatMessage / ChatHistory / ChatInput）
+│   │   ├── a11y/         # 无障碍组件（Modal 焦点陷阱）
+│   │   ├── chat/         # 对话组件（ChatMessage / ChatHistory / ChatInput / InlineErrorBanner）
 │   │   ├── eval/         # 评估组件（RagMetricsBar / ComparisonTable）
 │   │   ├── kb/           # 知识库组件
 │   │   ├── layout/       # Sidebar 等布局组件
-│   │   └── sources/      # 来源引用组件
+│   │   ├── sources/      # 来源引用组件
+│   │   └── ui/           # 通用 UI（Skeleton / ErrorBanner）
 │   ├── contexts/         # React Context（ChatContext）
 │   ├── hooks/            # 自定义 Hooks（useConversations adapter）
-│   └── lib/              # API 封装 + 类型定义
+│   └── lib/              # API 封装 + 类型定义 + 文案常量（copy.ts）
 └── README.md
 ```
 
@@ -97,9 +101,9 @@ npm run dev
 ### 4. 管理后台
 
 访问 `http://localhost:3000/admin/login`，输入 `ADMIN_PASSWORD`（默认 `admin123`）登录：
-- 仪表盘（统计总览 + 最近评估指标）
+- 仪表盘（统计总览 + 最近评估指标 + 加载骨架屏）
 - 知识库管理（`/admin/kb`）：上传 md/pdf/URL 导入、删除单条（5 秒内可撤销）
-- 评估报告（`/admin/eval`）：最新指标 + 历史快照列表
+- 评估报告（`/admin/eval`）：最新指标 + 历史快照列表 + 骨架屏加载
 
 JWT 存于 `localStorage.admin_token`，过期/失效自动跳转登录页。
 
@@ -132,8 +136,9 @@ cat evaluation/report.md
 
 ```bash
 cd frontend
-npm test          # 20 个 ChatContext 单测（CRUD + 持久化 + 流式 partial 同步）
+npm test          # 23 个 ChatContext 单测（CRUD + 持久化 + 流式 partial 同步 + abort + 重新生成）
 npm run lint      # ESLint 检查（0 warnings / errors）
+npx tsc --noEmit  # TypeScript 类型检查（0 errors）
 ```
 
 ## 📊 检索策略对比
@@ -144,9 +149,28 @@ npm run lint      # ESLint 检查（0 warnings / errors）
 | B | 混合检索（向量+BM25） | 无 |
 | C | 混合检索 | BGE-Reranker |
 | D | 小块检索+大块生成 | 无 |
-| **E（新增）** | **多路 Query 改写 + 混合检索** | 无 |
+| **E** | **多路 Query 改写 + 混合检索** | 无 |
 
-方案 E 用 LLM 把单条 query 改写成 3 个语义等价变体，**多路并发检索后按 chunk id 去重合并**（score 取 max），覆盖同义表达与口语化查询。失败/超时自动回退到单路混合检索。`SKIP_RERANKER=1` 仍生效。
+方案 E 用 LLM 把单条 query 改写成 3 个语义等价变体，多路并发检索后按 chunk id 去重合并（score 取 max），覆盖同义表达与口语化查询。失败/超时自动回退到单路混合检索。
+
+## 🎨 UI/UX 打磨（2026-06-12）
+
+通过 5 个 commit 完成前端体验打磨：
+
+| 块 | 内容 | 改动量 |
+|---|---|---|
+| A | 流式停止按钮 + 错误条 + 重新生成 | 8 文件 |
+| B | Dashboard 加载/错误态 + Skeleton + ErrorBanner | 5 文件 |
+| C | 可访问性：Modal 焦点陷阱 + skip link + focus-visible + prefers-reduced-motion | 13 文件 |
+| D | Race condition 修复 + 切会话不清流还原 | 6 文件 |
+| E | 骨架屏 + 字符串抽常量（copy.ts） | 5 文件 |
+
+**关键改进**：
+- 流式可中断：Stop 按钮 + AbortController UI 接入 + 切对话时流后台继续
+- 可访问性：20+ aria-label、focus-visible ring、Modal 焦点陷阱（inert + Tab 回退）、skip link、prefers-reduced-motion
+- 加载体验：骨架屏替代"加载中..."文字，shimmer 动画
+- 错误处理：ErrorBanner 替代 window.alert，InlineErrorBanner 替代 `[错误: ...]` 拼接
+- 文案集中：`frontend/lib/copy.ts` 7 组常量（CHAT/STATE/ADMIN/A11Y/QUESTIONS/EVAL/KB）
 
 ## 📝 API 文档
 
@@ -168,7 +192,7 @@ npm run lint      # ESLint 检查（0 warnings / errors）
 
 ### 检索链路调优（2026-06-11）
 
-通过**单变量 sweep**（5 Prompt 变体 + 4 Chunk size）调优 strategy E（多路改写 + 混合检索）的 HR@5。
+通过单变量 sweep（5 Prompt 变体 + 4 Chunk size）调优 strategy E（多路改写 + 混合检索）的 HR@5。
 
 **运行 sweep**：
 ```bash
@@ -186,6 +210,35 @@ python -m evaluation.sweep
 **Chunk size**（4 个）：200 / 500 / 800 / 1200，overlap 固定 10%
 
 **结果存放**：`backend/evaluation/results/sweep/`（本地，不提交 git）
+
+## 🚧 下一步
+
+### 高优先级
+
+| 方向 | 说明 | 预估工作量 |
+|---|---|---|
+| **Docker 部署** | Dockerfile + docker-compose（前端 + 后端 + ChromaDB），一键启动 | 1 天 |
+| **流式性能优化** | `mergePartialIntoConversation` 每 token 全数组重建 → 改用 `useReducer` + 选择性订阅；react-markdown 逐 token 重解析 → 缓存已渲染段落 | 1-2 天 |
+| **后端单测补全** | `services/` + `api/` 单测覆盖率补齐（当前只有前端 23 个单测） | 1 天 |
+| **知识库批量操作** | 多选 + 批量删除 + 批量导入 | 1 天 |
+
+### 中优先级
+
+| 方向 | 说明 | 预估工作量 |
+|---|---|---|
+| **暗色模式** | CSS 变量双套映射 + 主题切换 + 用户偏好持久化 | 2 天 |
+| **完整 i18n** | 引入 next-intl，copy.ts 已铺路（7 组常量），只换 dictionary loader | 1 天 |
+| **管理端移动端适配** | admin 侧边栏 256px 固定宽度 → 响应式折叠 | 半天 |
+| **评估历史对比** | 两次评估快照的指标 diff 展示 | 1 天 |
+
+### 低优先级
+
+| 方向 | 说明 | 预估工作量 |
+|---|---|---|
+| **知识库版本管理** | 导入/删除操作的版本快照 + 回滚 | 2 天 |
+| **用户反馈系统** | 对回答点赞/点踩 + 反馈收集 | 1 天 |
+| **多模型支持** | 接入 OpenAI / Claude 等其他 LLM | 1 天 |
+| **Redis 会话存储** | 后端 conversations 从内存 dict 迁移到 Redis | 半天 |
 
 ## License
 
