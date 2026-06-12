@@ -17,6 +17,7 @@ import type {
   EvalSummaryResponse,
   EvalDetailResponse,
   CompareResponse,
+  SweepResponse,
 } from './types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
@@ -314,6 +315,16 @@ export async function adminCompareEval(
     const err = await res.json().catch(() => ({ detail: '对比失败' }))
     throw new Error(err.detail || `HTTP ${res.status}`)
   }
+  return res.json()
+}
+
+/** 管理端：sweep 参数扫描结果 + winner */
+export async function adminGetSweep(signal?: AbortSignal): Promise<SweepResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/eval/sweep`, {
+    headers: adminHeaders(),
+    signal,
+  })
+  if (!res.ok) throw new Error('Failed to fetch sweep results')
   return res.json()
 }
 

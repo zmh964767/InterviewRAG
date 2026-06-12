@@ -6,12 +6,13 @@ import { ComparisonTable } from '@/components/eval/ComparisonTable'
 import { EvalItemRow } from '@/components/eval/EvalItemRow'
 import { RunEvalButton } from '@/components/eval/RunEvalButton'
 import { EvalCompareView } from '@/components/eval/EvalCompareView'
+import { SweepView } from '@/components/eval/SweepView'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { adminGetEvalSummary, adminGetEvalDetail } from '@/lib/api'
 import { EVAL } from '@/lib/copy'
 import type { EvalSummaryResponse, EvalDetailResponse } from '@/lib/types'
 
-type Tab = 'overview' | 'items' | 'history' | 'compare'
+type Tab = 'overview' | 'items' | 'history' | 'compare' | 'sweep'
 
 export default function AdminEvalPage() {
   const [summary, setSummary] = useState<EvalSummaryResponse | null>(null)
@@ -85,6 +86,7 @@ export default function AdminEvalPage() {
           ['items', '题目详情'],
           ['history', EVAL.HISTORY_TITLE],
           ['compare', '对比'],
+          ['sweep', 'Sweep'],
         ] as [Tab, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -239,6 +241,12 @@ export default function AdminEvalPage() {
             ) : (
               <EvalCompareView history={summary.history} latest={summary.latest} />
             )}
+          </div>
+        )}
+
+        {tab === 'sweep' && (
+          <div>
+            <SweepView />
           </div>
         )}
       </div>

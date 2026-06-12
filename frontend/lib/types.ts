@@ -229,3 +229,25 @@ export interface CompareResponse {
   regressed: number
   same: number
 }
+
+// =========================================================================
+// Sweep 参数扫描
+// =========================================================================
+
+/** sweep 组合单行(只含 E 和 B 两个策略) */
+export interface SweepRow {
+  type: 'prompt' | 'chunk'
+  prompt_variant: number | null
+  chunk_size: number | null
+  E_hr5: number
+  E_mrr: number
+  B_hr5: number
+  B_mrr: number
+  duration_s: number | null
+}
+
+/** /api/admin/eval/sweep 响应 */
+export interface SweepResponse {
+  rows: SweepRow[]
+  winner: SweepRow | null
+}
