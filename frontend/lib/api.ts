@@ -312,6 +312,40 @@ export async function adminListActiveTasks(): Promise<TaskListResponse> {
   return res.json()
 }
 
+/** 管理端：触发评估 */
+export async function adminRunEval(request: { mode: string }): Promise<{ task_id: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/eval/run`, {
+    method: 'POST',
+    headers: adminHeaders(),
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: '触发评估失败' }))
+    throw new Error(error.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** 管理端：列出评估任务 */
+export async function adminListEvalTasks(): Promise<TaskListResponse> {
+  const res = await fetch(`${API_BASE}/api/admin/eval/tasks`, { headers: adminHeaders() })
+  if (!res.ok) throw new Error('评估任务列表查询失败')
+  return res.json()
+}
+
+/** 管理端：取消评估任务 */
+export async function adminCancelEval(): Promise<{ cancelled: number }> {
+  const res = await fetch(`${API_BASE}/api/admin/eval/cancel`, {
+    method: 'POST',
+    headers: adminHeaders(),
+  })
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: '取消失败' }))
+    throw new Error(error.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 /** 管理端：修改管理员密码 */
 export async function adminChangePassword(
   currentPassword: string,

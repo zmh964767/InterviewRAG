@@ -25,20 +25,17 @@ router = APIRouter(dependencies=[Depends(require_admin)])
 RESULTS_DIR = Path(__file__).resolve().parent.parent.parent / "evaluation" / "results"
 _TS_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}[-:]\d{2}[-:]\d{2}$")
 
+# 存储正在运行的 asyncio 任务引用，用于取消
+_running_eval_tasks: dict[str, asyncio.Task] = {}
+
 
 def _normalize_history_item(data: dict, filename: str) -> dict:
+    """将 history/*.json 文件转为前端展示格式，timestamp 始终用文件名"""
     stem = filename.removesuffix(".json")
-    # 文件名是 "2026-06-08T23-26-02" 短横线格式
-    parts = stem.split("T", 1)
-    if len(parts) == 2:
-        ts = f"{parts[0]}T{parts[1]}"  # 保持短横线
-    else:
-        ts = stem
-    # 加上 timestamp 字段（如果数据里有）
-    timestamp = data.get("timestamp", ts)
+    # 文件名是 "2026-06-08T23-26-02" 短横线格式，始终作为 timestamp
     return {
         "metrics": data.get("aggregated", {}),
-        "timestamp": timestamp,
+        "timestamp": stem,
         "total": data.get("total", 0),
         "error_count": len(data.get("errors", [])),
     }
@@ -96,8 +93,27 @@ async def run_eval_endpoint(request: RunEvalRequest):
         raise HTTPException(status_code=409, detail="已有评估任务在进行中")
 
     task = task_store.create("eval", f"mode={request.mode}")
-    asyncio.create_task(_run_eval_task(task.task_id, request.mode))
+    _async_task = asyncio.create_task(_run_eval_task(task.task_id, request.mode))
+    _running_eval_tasks[task.task_id] = _async_task
     return {"task_id": task.task_id}
+
+
+@router.post("/eval/cancel")
+async def cancel_eval_endpoint():
+    """取消正在运行的评估任务"""
+    active = task_store.list_active()
+    if not active:
+        raise HTTPException(status_code=404, detail="没有正在运行的评估任务")
+
+    cancelled = 0
+    for t in active:
+        task_ref = _running_eval_tasks.pop(t.task_id, None)
+        if task_ref:
+            task_ref.cancel()
+        task_store.update(t.task_id, status="failed", error_message="用户取消", finished_at=datetime.now().isoformat())
+        cancelled += 1
+
+    return {"cancelled": cancelled}
 
 
 @router.get("/eval/tasks")
@@ -105,6 +121,7 @@ async def list_eval_tasks():
     """列出所有评估任务（用于前端轮询）"""
     from app.models.schemas import TaskListResponse
     tasks = task_store.list_all() if hasattr(task_store, "list_all") else task_store.list_active()
+    eval_tasks = [t for t in tasks if t.source_type == "eval"]
     return TaskListResponse(tasks=[{
         "task_id": t.task_id,
         "status": t.status,
@@ -118,7 +135,7 @@ async def list_eval_tasks():
         "started_at": t.started_at,
         "finished_at": t.finished_at,
         "error_message": t.error_message,
-    } for t in tasks])
+    } for t in eval_tasks])
 
 
 async def _run_eval_task(task_id: str, mode: str) -> None:
@@ -126,9 +143,8 @@ async def _run_eval_task(task_id: str, mode: str) -> None:
     task_store.update(task_id, status="running")
     try:
         from evaluation.run import load_eval_dataset
-        from evaluation.runner import run_ragas_evaluation, run_comparison_evaluation
+        from evaluation.runner import run_ragas_evaluation, run_comparison_evaluation, EvalSummary
         from evaluation.regression import save_results
-        from evaluation.zhipu_llm import EvalSummary
 
         items = load_eval_dataset()
         if not items:
@@ -136,18 +152,26 @@ async def _run_eval_task(task_id: str, mode: str) -> None:
 
         # 跑 RAGAS（如需要）
         if mode in ("full", "ragas", "sanity"):
-            summary = await run_ragas_evaluation(items)
+            def _on_progress(done, total):
+                task_store.update(task_id, total=total, done=done)
+            logger.info(f"[eval] 开始 RAG 查询，{len(items)} 题...")
+            summary = await run_ragas_evaluation(items, progress_callback=_on_progress)
+            logger.info(f"[eval] RAGAS 评估完成，aggregated={summary.aggregated}")
         else:
             summary = EvalSummary(results=[], aggregated={}, errors=[], error_rate=0)
 
         # 跑 comparison（如需要）
         if mode in ("full", "comparison"):
+            logger.info(f"[eval] 开始策略对比...")
             comparison = await run_comparison_evaluation(items)
+            logger.info(f"[eval] 策略对比完成")
         else:
             comparison = {}
 
         # 保存结果
+        logger.info(f"[eval] 保存结果...")
         save_results(summary=summary, comparison=comparison, results_dir=RESULTS_DIR)
+        logger.info(f"[eval] 保存完成")
 
         task_store.update(
             task_id,
@@ -155,6 +179,8 @@ async def _run_eval_task(task_id: str, mode: str) -> None:
             finished_at=datetime.now().isoformat(),
         )
         logger.info(f"评估任务 {task_id} 完成")
+    except asyncio.CancelledError:
+        task_store.update(task_id, status="failed", error_message="用户取消", finished_at=datetime.now().isoformat())
     except Exception as e:
         logger.error(f"评估任务 {task_id} 失败: {e}", exc_info=True)
         task_store.update(

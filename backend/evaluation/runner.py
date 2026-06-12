@@ -42,13 +42,21 @@ async def _evaluate_v04(
     answer_relevancy_m,
     context_precision_m,
     context_recall_m,
+    progress_callback=None,
+    phase_offset=0,
+    phase_total=1,
 ) -> dict:
     """RAGAS 0.4+ 单题接口 + asyncio.gather 并发
 
     对每题调 4 个 metric 的 ascore，5 路并发。
+    progress_callback: (done, total) 用于进度更新
+    phase_offset / phase_total: 跨阶段进度归一化
     """
     n = len(ragas_data["question"])
     sem = asyncio.Semaphore(2)  # RAGAS metrics 不是线程安全的，限制并发
+
+    sem = asyncio.Semaphore(2)
+    completed = [0]  # mutable counter for logging
 
     async def score_one(idx: int):
         async with sem:
@@ -89,26 +97,42 @@ async def _evaluate_v04(
                 cr = 0.0
             return f, a, cp, cr
 
-    results = await asyncio.gather(*[score_one(i) for i in range(n)])
+    results = []
 
-    f_sum = sum(r[0] for r in results) / n if n else 0
-    a_sum = sum(r[1] for r in results) / n if n else 0
-    cp_sum = sum(r[2] for r in results) / n if n else 0
-    cr_sum = sum(r[3] for r in results) / n if n else 0
+    async def tracked_score(idx):
+        r = await score_one(idx)
+        completed[0] += 1
+        if progress_callback:
+            progress_callback(phase_offset + completed[0], phase_total)
+        return r
 
-    return {
+    all_scores = await asyncio.gather(*[tracked_score(i) for i in range(n)])
+
+    f_sum = sum(r[0] for r in all_scores) / n if n else 0
+    a_sum = sum(r[1] for r in all_scores) / n if n else 0
+    cp_sum = sum(r[2] for r in all_scores) / n if n else 0
+    cr_sum = sum(r[3] for r in all_scores) / n if n else 0
+
+    aggregated = {
         "faithfulness": f_sum,
         "answer_relevancy": a_sum,
         "context_precision": cp_sum,
         "context_recall": cr_sum,
     }
+    # 返回 (aggregated, per_item_metrics)
+    per_item = [
+        {"faithfulness": r[0], "answer_relevancy": r[1], "context_precision": r[2], "context_recall": r[3]}
+        for r in all_scores
+    ]
+    return aggregated, per_item
 
 
-async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
-    """运行 RAGAS 0.1.x 评估
+async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> EvalSummary:
+    """运行 RAGAS 评估
 
     Args:
         items: 评估题列表 [{id, question, ground_truth, ...}]
+        progress_callback: 可选回调 (done, total) 用于进度更新
 
     Returns:
         EvalSummary
@@ -116,6 +140,7 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
     from app.services.rag_service import RAGService
     from evaluation.zhipu_llm import create_zhipu_llm
 
+    ragas_total = len(items) * 2  # RAG查询 + RAGAS评估 各17步
     rag = RAGService()
     llm = create_zhipu_llm()
 
@@ -127,7 +152,8 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
     errors: list[str] = []
     answers_map: dict[str, str] = {}
 
-    for item in items:
+    total = len(items)
+    for idx, item in enumerate(items):
         try:
             result = await rag.query(item["question"])
             rag_answer = result.get("answer", "")
@@ -145,6 +171,8 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
         except Exception as e:
             logger.error(f"题目 {item.get('id', '?')} RAG 失败: {e}")
             errors.append(item.get("id", "unknown"))
+        if progress_callback:
+            progress_callback(idx + 1, total)
 
     if not ragas_data["question"]:
         return EvalSummary(
@@ -209,10 +237,15 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
             context_precision_m = _ContextPrecision(llm=ragas_llm)
             context_recall_m = _ContextRecall(llm=ragas_llm)
 
-            aggregated = await _evaluate_v04(
+            aggregated, per_item_metrics = await _evaluate_v04(
                 ragas_data, faithfulness_m, answer_relevancy_m,
                 context_precision_m, context_recall_m,
+                progress_callback=progress_callback,
+                phase_offset=len(items),
+                phase_total=len(items) * 2,
             )
+            # 把逐题指标填回 EvalResult
+            id_to_metrics = {item_id: per_item_metrics[i] for i, item_id in enumerate(successful_ids)}
         else:
             # RAGAS 0.1.x 批量接口
             from ragas import evaluate
@@ -234,7 +267,7 @@ async def run_ragas_evaluation(items: list[dict]) -> EvalSummary:
     # 3. 构造 results（每题一个 stub 成功结果）
     # Build id→question map for filling
     q_map = {item["id"]: item["question"] for item in items}
-    results = [EvalResult(id=i, success=True, question=q_map.get(i, ""), answer=answers_map.get(i, ""), metrics={}) for i in successful_ids]
+    results = [EvalResult(id=i, success=True, question=q_map.get(i, ""), answer=answers_map.get(i, ""), metrics=id_to_metrics.get(i, {})) for i in successful_ids]
     results += [EvalResult(id=e, success=False) for e in errors]
 
     return EvalSummary(

@@ -167,10 +167,31 @@ export interface EvalComparisonPlan {
   mrr: number
 }
 
+/** 单题评估结果 */
+export interface EvalItemResult {
+  id: string
+  question: string
+  answer: string
+  metrics: Record<string, number>
+  error?: string | null
+}
+
 /** /api/eval/detail 响应 */
 export interface EvalDetailResponse {
+  timestamp?: string
   aggregated: EvalMetrics
   errors: string[]
   total: number
+  items?: EvalItemResult[]
   comparison: Record<string, EvalComparisonPlan>
+}
+
+/** 触发评估请求 */
+export interface RunEvalRequest {
+  mode: 'full' | 'ragas' | 'comparison' | 'sanity'
+}
+
+/** 触发评估响应 */
+export interface RunEvalResponse {
+  task_id: string
 }

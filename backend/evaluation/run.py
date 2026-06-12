@@ -21,6 +21,15 @@ logger = logging.getLogger(__name__)
 RESULTS_DIR_NAME = "results"
 
 
+def load_eval_dataset() -> list[dict]:
+    """加载评估数据集，过滤掉 irrelevant 类型"""
+    eval_path = Path(__file__).parent / "eval_dataset.json"
+    if not eval_path.exists():
+        raise FileNotFoundError(f"评估数据集不存在: {eval_path}")
+    eval_data = json.loads(eval_path.read_text(encoding="utf-8"))
+    return [item for item in eval_data if item.get("type") != "irrelevant"]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="RAG 评估工具")
     parser.add_argument(
