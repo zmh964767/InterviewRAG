@@ -70,16 +70,7 @@ async def query_endpoint(
 
 
 async def stream_generator(rag_service, question, history, conversation_id, request: Request):
-    """SSE 流式生成器
-
-    修复 1：SSE 响应不带 response_model，移除 FastAPI 强校验。
-    修复 2：用户切走时浏览器 abort 会触发 CancelledError，
-            此时已生成的部分答案（partial answer）必须保存到
-            conversations[] 字典，否则切回来就是空。
-    修复 3：每次 yield 前检查 request.is_disconnected()，主动退出流。
-            避免：LLM 已停止但客户端已断开 → yield 仍然触发 →
-            Starlette 抛 "BodyStreamBuffer was aborted" 错误。
-    """
+    """SSE 流式生成器"""
     full_answer = ""
     try:
         gen = await rag_service.query_stream(

@@ -17,7 +17,7 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
   const containerRef = useRef<HTMLDivElement>(null)
   const prevLenRef = useRef(messages.length)
   const mountedRef = useRef(false)
-  const { lastError, clearError } = useChatContext()
+  const { lastError, clearError, continueLast } = useChatContext()
 
   // 滚动策略：
   // - 首次挂载（路由恢复）→ 滚到底部（用户回到对话时看到最新消息）
@@ -157,6 +157,11 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
               message={message}
               isStreaming={isLastAssistant && isLoading}
               onRegenerate={isLastAssistant ? onRegenerate : undefined}
+              onContinue={
+                isLastAssistant && lastError?.messageId === message.id
+                  ? continueLast
+                  : undefined
+              }
               error={messageError}
               onDismissError={
                 messageError

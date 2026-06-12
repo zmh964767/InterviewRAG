@@ -52,9 +52,9 @@ export interface ChatContextValue {
   lastError: ChatError | null
 
   // 流式控制
-  sendMessage: (content: string, conversationId: string) => Promise<void>
+  sendMessage: (content: string, conversationId: string, options?: { existingAiMsgId?: string; skipUser?: boolean }) => Promise<void>
   abort: () => void
-  resendLast: () => Promise<void>
+  continueLast: () => Promise<void>
   clearError: (messageId?: string) => void
   subscribe: (cb: (partial: StreamPartial | null) => void) => () => void
   getPartial: () => StreamPartial | null
@@ -142,6 +142,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // ---- refs ----
   const abortRef = useRef<AbortController | null>(null)
+  // 用户主动中止标记：手动点停止时置 true，
+  // sendMessage 的 finally 据此决定是否显示 InlineErrorBanner。
+  // 手动点停止 = 显示"重新生成"banner（用户留在当前对话，想重试）。
+  // 切会话 = 不触发 abort（旧流后台继续生成）。
+  const userStopRef = useRef(false)
   const subscribersRef = useRef<Set<(p: StreamPartial | null) => void>>(
     new Set(),
   )
@@ -222,62 +227,91 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendMessage = useCallback(
-    async (content: string, conversationId: string) => {
+    async (content: string, conversationId: string, options?: { existingAiMsgId?: string; skipUser?: boolean }) => {
       if (!content.trim() || isLoading) return
 
-      // 三步：写 user + 写空 ai + 启流
-      const userMsg: Message = {
-        id: Date.now().toString(),
-        role: 'user',
-        content,
-        timestamp: Date.now(),
-      }
-      const aiMsgId = (Date.now() + 1).toString()
-      const aiMsg: Message = {
-        id: aiMsgId,
-        role: 'assistant',
-        content: '',
-        sources: [],
-        timestamp: Date.now(),
-      }
+      const { existingAiMsgId, skipUser } = options ?? {}
 
-      // 1+2: 把 user + 空 ai 一次性写入
-      setConversations((prev) => {
-        // 若对话不存在，创建之
-        const exists = prev.some((c) => c.id === conversationId)
-        const next = exists
-          ? prev
-          : [createEmptyConversationWithId(conversationId), ...prev]
-        return next.map((c) => {
-          if (c.id !== conversationId) return c
-          const isFirstUser = c.messages.length === 0
-          return {
-            ...c,
-            messages: [...c.messages, userMsg, aiMsg],
-            updatedAt: Date.now(),
-            title: isFirstUser ? getTitleFromMessages([userMsg]) : c.title,
-          }
+      const aiMsgId = existingAiMsgId ?? (Date.now() + 1).toString()
+
+      // existingAiMsgId 路径：continueLast 已清空 ai 消息，sendMessage 复用同一条消息
+      // skipUser=true 时不追加 user 消息（continueLast 场景已有 user 消息）
+      // fullContent 从空开始，新流的 token 直接写入
+      let existingContent = ''
+
+      if (existingAiMsgId) {
+        // continueLast: 不清空 ai 消息（保留已有 partial），不追加 user 消息
+        // 新流的 token 会追加到 existingContent 后面
+        setConversations((prev) =>
+          prev.map((c) => {
+            if (c.id !== conversationId) return c
+            // 读取已有内容用于后续追加
+            const existing = c.messages.find((m) => m.id === existingAiMsgId)
+            existingContent = existing?.content ?? ''
+            if (skipUser) {
+              // continueLast: 不追加 user 消息，不修改已有 ai 消息
+              return { ...c, updatedAt: Date.now() }
+            }
+            const userMsg: Message = {
+              id: Date.now().toString(),
+              role: 'user',
+              content,
+              timestamp: Date.now(),
+            }
+            return { ...c, messages: [...c.messages, userMsg], updatedAt: Date.now() }
+          }),
+        )
+      } else {
+        // 正常发送：创建新的 user + ai 消息对
+        const userMsg: Message = {
+          id: Date.now().toString(),
+          role: 'user',
+          content,
+          timestamp: Date.now(),
+        }
+        const aiMsg: Message = {
+          id: aiMsgId,
+          role: 'assistant',
+          content: '',
+          sources: [],
+          timestamp: Date.now(),
+        }
+        setConversations((prev) => {
+          const exists = prev.some((c) => c.id === conversationId)
+          const next = exists
+            ? prev
+            : [createEmptyConversationWithId(conversationId), ...prev]
+          return next.map((c) => {
+            if (c.id !== conversationId) return c
+            const isFirstUser = c.messages.length === 0
+            return {
+              ...c,
+              messages: [...c.messages, userMsg, aiMsg],
+              updatedAt: Date.now(),
+              title: isFirstUser ? getTitleFromMessages([userMsg]) : c.title,
+            }
+          })
         })
-      })
+      }
 
-      // 3: 触发 partial
+      // 3: 触发 partial（continue 时从已有内容开始）
       const initial: StreamPartial = {
         convId: conversationId,
         aiMsgId,
-        content: '',
+        content: existingContent,
         sources: [],
       }
       setPartial(initial)
       partialRef.current = initial
-      // 新一轮发送,清掉上次的错误条
       setLastError(null)
 
       setIsLoading(true)
       setStreamingConvId(conversationId)
 
-      abortRef.current = new AbortController()
+      const controller = new AbortController()
+      abortRef.current = controller
 
-      let fullContent = ''
+      let fullContent = existingContent
       let sources: SourceRef[] = []
 
       try {
@@ -285,12 +319,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           content,
           conversationId,
           [],
-          abortRef.current?.signal,
+          controller.signal,
         )) {
-          // 中断检查：real-world 的 queryStream 会因 signal 触发而抛 AbortError,
-          // 但万一上游忘记响应 abort,我们也兜底跳过剩余事件。
-          if (abortRef.current?.signal.aborted) {
-            setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
+          // 中断检查：用局部 controller，不读 ref（ref 可能已被下一轮 sendMessage 覆盖）。
+          if (controller.signal.aborted) {
+            if (userStopRef.current) {
+              setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
+            }
             return
           }
           if (event.error) break
@@ -326,48 +361,71 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           }
         }
       } catch (err) {
-        // 区分 abort（用户主动切走/点停止）和真实错误
         const isAbort =
           err instanceof Error &&
-          (err.name === 'AbortError' || abortRef.current?.signal.aborted)
+          (err.name === 'AbortError' || controller.signal.aborted)
         if (isAbort) {
-          // 中断：partial 内容已通过 mergePartialIntoConversation 增量写入。
-          // 不再拼 "*— 已中断 —*"(InlineErrorBanner 是新的信号)。
-          // 用 lastError 记录中断,绑定到这条 ai 消息。
-          setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
+          if (userStopRef.current) {
+            setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
+          }
           return
         }
-        // 真实错误:保留已流到一半的 partial,不在内容里拼接 "[错误: ...]"
-        // 用 lastError 承载,InlineErrorBanner 渲染
         const errMsg = err instanceof Error ? err.message : '未知错误'
         setLastError({ kind: 'error', messageId: aiMsgId, message: errMsg })
       } finally {
-        setIsLoading(false)
-        setStreamingConvId(null)
+        userStopRef.current = false
+        // ★ 仅当 controller 仍是当前活跃的才清状态。
+        //   若用户已切走并开始了新流，旧流的 finally 不应覆盖新流的 isLoading/streamingConvId。
+        if (abortRef.current === controller) {
+          setIsLoading(false)
+          setStreamingConvId(null)
+        }
       }
     },
     [isLoading, mergePartialIntoConversation],
   )
 
-  // ---- 流式控制:手动中止 ----
+  // ---- 流式控制:手动中止（用户点了 Stop 按钮，显示"重新生成"banner） ----
   const abort = useCallback(() => {
+    userStopRef.current = true
     if (abortRef.current) {
       abortRef.current.abort()
     }
   }, [])
 
-  // ---- 流式控制:重发上轮 query ----
+  // ---- 流式控制:重新生成（清空旧 partial + 用同一个 aiMsgId 重新生成） ----
+  // 后端不支持"从断点续写"，所以 continueLast = 清空已有 partial + 重新生成。
+  // 传 existingAiMsgId 让 sendMessage 更新已有 ai 消息（不创建新的消息对），
+  // 避免对话里出现重复的 user 消息。
   const conversationsRef = useRef<Conversation[]>([])
   conversationsRef.current = conversations
 
-  const resendLast = useCallback(async () => {
+  const continueLast = useCallback(async () => {
     const targetConvId = currentIdRef.current
     if (!targetConvId) return
     const conv = conversationsRef.current.find((c) => c.id === targetConvId)
     if (!conv) return
+    const lastAssistant = [...conv.messages].reverse().find((m) => m.role === 'assistant')
     const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
     if (!lastUser) return
-    await sendMessage(lastUser.content, targetConvId)
+    // 清空已有 partial 内容，用同一个 aiMsgId 重新生成（不创建重复 user 消息）
+    if (lastAssistant) {
+      setConversations((prev) =>
+        prev.map((c) => {
+          if (c.id !== targetConvId) return c
+          return {
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === lastAssistant.id ? { ...m, content: '', sources: [] } : m,
+            ),
+          }
+        }),
+      )
+    }
+    await sendMessage(lastUser.content, targetConvId, {
+      existingAiMsgId: lastAssistant?.id,
+      skipUser: true,
+    })
   }, [sendMessage])
 
   // streamingConvIdRef for deleteConversation
@@ -392,11 +450,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchConversation = useCallback((id: string) => {
-    // 若当前正在流(无论切走/切回),先 abort 让旧流停止,避免后台继续吃 token
-    if (abortRef.current) {
-      abortRef.current.abort()
-    }
-    setLastError(null)
+    // 不中止当前流：让流在后台继续生成，partial 内容会通过
+    // mergePartialIntoConversation 增量写入对应会话。切回时直接从
+    // conversations 里读取最新状态，不打断用户体验。
     setCurrentId(id)
   }, [])
 
@@ -456,7 +512,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     lastError,
     sendMessage,
     abort,
-    resendLast,
+    continueLast,
     clearError,
     subscribe,
     getPartial,

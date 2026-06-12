@@ -13,6 +13,7 @@ interface ChatMessageProps {
   message: Message
   isStreaming?: boolean
   onRegenerate?: () => void
+  onContinue?: () => void
   error?: { kind: 'aborted' | 'error'; message: string } | null
   onDismissError?: () => void
 }
@@ -21,6 +22,7 @@ export function ChatMessage({
   message,
   isStreaming,
   onRegenerate,
+  onContinue,
   error,
   onDismissError,
 }: ChatMessageProps) {
@@ -100,7 +102,7 @@ export function ChatMessage({
           <InlineErrorBanner
             kind={error.kind}
             message={error.message}
-            onRetry={onRegenerate}
+            onRetry={onContinue ?? onRegenerate}
             onDismiss={onDismissError}
           />
         )}

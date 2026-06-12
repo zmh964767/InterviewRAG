@@ -30,7 +30,7 @@ export const CHAT = {
   ERROR: {
     ABORTED: '生成已停止',
     FAILED: '生成出错了',
-    RETRY: '重试',
+    RETRY: '重新生成',
     DISMISS: '关闭',
   },
 } as const
