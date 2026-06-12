@@ -6,6 +6,7 @@ POST /api/admin/eval/run      — 异步触发评估
 POST /api/admin/eval/cancel   — 取消正在运行的评估
 GET  /api/admin/eval/tasks    — 列出评估任务
 GET  /api/admin/eval/compare  — 两快照指标对比
+GET  /api/admin/eval/sweep    — sweep 参数扫描结果 + winner
 """
 
 import asyncio
@@ -209,6 +210,78 @@ async def list_eval_tasks():
         "finished_at": t.finished_at,
         "error_message": t.error_message,
     } for t in eval_tasks])
+
+
+# Sweep 扫描的固定维度
+_SWEEP_PROMPT_VARIANTS = (1, 2, 3, 4, 5)
+_SWEEP_CHUNK_SIZES = (200, 500, 800, 1200)
+
+
+@router.get("/eval/sweep")
+async def eval_sweep():
+    """返回 sweep 参数扫描结果 + winner (E_hr5 最高的组合)
+
+    扫描目录:evaluation/results/sweep/
+    - prompt_v1..5.json   (扫描 prompt 变体)
+    - chunk_{200,500,800,1200}.json  (扫描 chunk size)
+    只取每个 json 里 E_多路改写混合 和 B_混合检索 两个策略的 hit_rate@5 / mrr。
+    """
+    from app.models.schemas import SweepResponse, SweepRow
+
+    sweep_dir = RESULTS_DIR / "sweep"
+    if not sweep_dir.is_dir():
+        return SweepResponse(rows=[], winner=None)
+
+    rows: list[SweepRow] = []
+
+    for v in _SWEEP_PROMPT_VARIANTS:
+        path = sweep_dir / f"prompt_v{v}.json"
+        if not path.exists():
+            continue
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning("跳过无法解析的 sweep 文件: %s", path)
+            continue
+        comp = d.get("comparison") or {}
+        e = comp.get("E_多路改写混合") or {}
+        b = comp.get("B_混合检索") or {}
+        rows.append(SweepRow(
+            type="prompt",
+            prompt_variant=d.get("prompt_variant"),
+            chunk_size=d.get("chunk_size"),
+            E_hr5=float(e.get("hit_rate@5", 0) or 0),
+            E_mrr=float(e.get("mrr", 0) or 0),
+            B_hr5=float(b.get("hit_rate@5", 0) or 0),
+            B_mrr=float(b.get("mrr", 0) or 0),
+            duration_s=d.get("duration_s"),
+        ))
+
+    for size in _SWEEP_CHUNK_SIZES:
+        path = sweep_dir / f"chunk_{size}.json"
+        if not path.exists():
+            continue
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning("跳过无法解析的 sweep 文件: %s", path)
+            continue
+        comp = d.get("comparison") or {}
+        e = comp.get("E_多路改写混合") or {}
+        b = comp.get("B_混合检索") or {}
+        rows.append(SweepRow(
+            type="chunk",
+            prompt_variant=d.get("prompt_variant"),
+            chunk_size=d.get("chunk_size"),
+            E_hr5=float(e.get("hit_rate@5", 0) or 0),
+            E_mrr=float(e.get("mrr", 0) or 0),
+            B_hr5=float(b.get("hit_rate@5", 0) or 0),
+            B_mrr=float(b.get("mrr", 0) or 0),
+            duration_s=d.get("duration_s"),
+        ))
+
+    winner = max(rows, key=lambda r: r.E_hr5) if rows else None
+    return SweepResponse(rows=rows, winner=winner)
 
 
 async def _run_eval_task(task_id: str, mode: str) -> None:

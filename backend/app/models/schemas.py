@@ -166,3 +166,25 @@ class CompareResponse(BaseModel):
     improved: int = Field(description="上升的指标数")
     regressed: int = Field(description="下降的指标数")
     same: int = Field(description="持平的指标数")
+
+
+# =========================================================================
+# Sweep 参数扫描
+# =========================================================================
+
+class SweepRow(BaseModel):
+    """单个 sweep 组合的结果(只取 E 和 B 两个策略)"""
+    type: str = Field(description="prompt | chunk")
+    prompt_variant: int | None = Field(default=None, description="prompt variant 编号(1..5),chunk sweep 时为该次扫描使用的 variant")
+    chunk_size: int | None = Field(default=None, description="chunk size,prompt sweep 时为该次扫描使用的 chunk size")
+    E_hr5: float = Field(description="E_多路改写混合 策略的 hit_rate@5")
+    E_mrr: float = Field(description="E_多路改写混合 策略的 mrr")
+    B_hr5: float = Field(description="B_混合检索 策略的 hit_rate@5")
+    B_mrr: float = Field(description="B_混合检索 策略的 mrr")
+    duration_s: float | None = Field(default=None, description="本次扫描耗时(秒)")
+
+
+class SweepResponse(BaseModel):
+    """sweep 全部组合 + winner"""
+    rows: list[SweepRow] = Field(default_factory=list, description="所有 sweep 组合,按文件读取顺序")
+    winner: SweepRow | None = Field(default=None, description="E_hr5 最高的组合")
