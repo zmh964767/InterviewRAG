@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -29,6 +29,32 @@ export function ChatMessage({
   const [showSources, setShowSources] = useState(true)
   const [copied, setCopied] = useState(false)
   const isUser = message.role === 'user'
+
+  // ---- Markdown 节流:流式时每 50ms 解析一次,减少 ReactMarkdown 重复调用 ----
+  const THROTTLE_MS = 50
+  const [committedContent, setCommittedContent] = useState(message.content)
+  const lastCommitRef = useRef(Date.now())
+
+  useEffect(() => {
+    if (!isStreaming) {
+      // 流结束:立即 commit 最新内容
+      setCommittedContent(message.content)
+      lastCommitRef.current = Date.now()
+      return
+    }
+    const now = Date.now()
+    const elapsed = now - lastCommitRef.current
+    if (elapsed >= THROTTLE_MS) {
+      setCommittedContent(message.content)
+      lastCommitRef.current = now
+    } else {
+      const t = setTimeout(() => {
+        setCommittedContent(message.content)
+        lastCommitRef.current = Date.now()
+      }, THROTTLE_MS - elapsed)
+      return () => clearTimeout(t)
+    }
+  }, [message.content, isStreaming])
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content)
@@ -84,7 +110,7 @@ export function ChatMessage({
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}
                 >
-                  {message.content}
+                  {committedContent}
                 </ReactMarkdown>
               </div>
             )
