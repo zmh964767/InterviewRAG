@@ -16,6 +16,28 @@ function formatDuration(s: number | null): string {
   return `${m}m ${rest}s`
 }
 
+/** 提升百分比:winner 相对 latest_summary baseline 的变化率
+ *  - baseline = 0 时返回 '—' (没有可比较的基准)
+ *  - 正向:var(--ink); 持平:var(--ink-muted); 下降:#991b1b
+ */
+function formatImprovement(winnerHr5: number, baseline: number): {
+  text: string
+  color: string
+} {
+  if (baseline <= 0) {
+    return { text: '—', color: 'var(--ink-muted)' }
+  }
+  const pct = (winnerHr5 - baseline) / baseline
+  const rounded = Math.round(pct * 1000) / 10  // 一位小数
+  const sign = rounded > 0 ? '+' : ''
+  const text = `${sign}${rounded.toFixed(1)}%`
+  if (Math.abs(pct) < 1e-6) {
+    return { text: '持平', color: 'var(--ink-muted)' }
+  }
+  const color = pct > 0 ? 'var(--ink)' : '#991b1b'
+  return { text, color }
+}
+
 export function SweepView() {
   const [data, setData] = useState<SweepResponse | null>(null)
   const [loading, setLoading] = useState(true)
@@ -52,6 +74,7 @@ export function SweepView() {
   // 按 E_hr5 降序
   const sortedRows = [...data.rows].sort((a, b) => b.E_hr5 - a.E_hr5)
   const winner = data.winner
+  const baseline = data.baseline_e_hr5
 
   return (
     <div>
@@ -77,7 +100,12 @@ export function SweepView() {
               label="Chunk size"
               value={winner.chunk_size != null ? String(winner.chunk_size) : '—'}
             />
-            <WinnerField label="E HR@5" value={formatPct(winner.E_hr5)} highlight />
+            <WinnerField
+              label="E HR@5"
+              value={formatPct(winner.E_hr5)}
+              subValue={formatImprovement(winner.E_hr5, baseline)}
+              highlight
+            />
           </div>
         </div>
       )}
@@ -115,7 +143,17 @@ export function SweepView() {
   )
 }
 
-function WinnerField({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
+function WinnerField({
+  label,
+  value,
+  subValue,
+  highlight,
+}: {
+  label: string
+  value: string
+  subValue?: { text: string; color: string }
+  highlight?: boolean
+}) {
   return (
     <div>
       <div className="text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>{label}</div>
@@ -128,6 +166,14 @@ function WinnerField({ label, value, highlight }: { label: string; value: string
       >
         {value}
       </div>
+      {subValue && (
+        <div
+          className="text-xs mt-0.5 tabular-nums"
+          style={{ color: subValue.color }}
+        >
+          提升 {subValue.text}
+        </div>
+      )}
     </div>
   )
 }

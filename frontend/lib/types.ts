@@ -250,4 +250,6 @@ export interface SweepRow {
 export interface SweepResponse {
   rows: SweepRow[]
   winner: SweepRow | null
+  /** 从 latest_summary.json 动态读取的基准,文件/字段缺失时为 0.0 */
+  baseline_e_hr5: number
 }
