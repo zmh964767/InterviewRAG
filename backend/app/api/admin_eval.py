@@ -216,6 +216,36 @@ async def list_eval_tasks():
 _SWEEP_PROMPT_VARIANTS = (1, 2, 3, 4, 5)
 _SWEEP_CHUNK_SIZES = (200, 500, 800, 1200)
 
+
+def _load_sweep_file(sweep_dir: Path, filename: str, row_type: str) -> "SweepRow | None":
+    """读单个 sweep json 文件并转为 SweepRow
+
+    文件缺失 / 解析失败 / 字段缺失 → 返回 None(调用方跳过)
+    """
+    from app.models.schemas import SweepRow
+
+    path = sweep_dir / filename
+    if not path.exists():
+        return None
+    try:
+        d = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        logger.warning("跳过无法解析的 sweep 文件: %s", path)
+        return None
+    comp = d.get("comparison") or {}
+    e = comp.get("E_多路改写混合") or {}
+    b = comp.get("B_混合检索") or {}
+    return SweepRow(
+        type=row_type,
+        prompt_variant=d.get("prompt_variant"),
+        chunk_size=d.get("chunk_size"),
+        E_hr5=float(e.get("hit_rate@5", 0) or 0),
+        E_mrr=float(e.get("mrr", 0) or 0),
+        B_hr5=float(b.get("hit_rate@5", 0) or 0),
+        B_mrr=float(b.get("mrr", 0) or 0),
+        duration_s=d.get("duration_s"),
+    )
+
 # 从 latest_summary.json 取 baseline 时的 fallback 链
 # 优先级:context_precision > faithfulness > 第一个非 0 字段 > 0.0
 _BASELINE_METRIC_PREFERENCE = ("context_precision", "faithfulness")
@@ -272,50 +302,14 @@ async def eval_sweep():
     rows: list[SweepRow] = []
 
     for v in _SWEEP_PROMPT_VARIANTS:
-        path = sweep_dir / f"prompt_v{v}.json"
-        if not path.exists():
-            continue
-        try:
-            d = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            logger.warning("跳过无法解析的 sweep 文件: %s", path)
-            continue
-        comp = d.get("comparison") or {}
-        e = comp.get("E_多路改写混合") or {}
-        b = comp.get("B_混合检索") or {}
-        rows.append(SweepRow(
-            type="prompt",
-            prompt_variant=d.get("prompt_variant"),
-            chunk_size=d.get("chunk_size"),
-            E_hr5=float(e.get("hit_rate@5", 0) or 0),
-            E_mrr=float(e.get("mrr", 0) or 0),
-            B_hr5=float(b.get("hit_rate@5", 0) or 0),
-            B_mrr=float(b.get("mrr", 0) or 0),
-            duration_s=d.get("duration_s"),
-        ))
+        row = _load_sweep_file(sweep_dir, f"prompt_v{v}.json", "prompt")
+        if row is not None:
+            rows.append(row)
 
     for size in _SWEEP_CHUNK_SIZES:
-        path = sweep_dir / f"chunk_{size}.json"
-        if not path.exists():
-            continue
-        try:
-            d = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
-            logger.warning("跳过无法解析的 sweep 文件: %s", path)
-            continue
-        comp = d.get("comparison") or {}
-        e = comp.get("E_多路改写混合") or {}
-        b = comp.get("B_混合检索") or {}
-        rows.append(SweepRow(
-            type="chunk",
-            prompt_variant=d.get("prompt_variant"),
-            chunk_size=d.get("chunk_size"),
-            E_hr5=float(e.get("hit_rate@5", 0) or 0),
-            E_mrr=float(e.get("mrr", 0) or 0),
-            B_hr5=float(b.get("hit_rate@5", 0) or 0),
-            B_mrr=float(b.get("mrr", 0) or 0),
-            duration_s=d.get("duration_s"),
-        ))
+        row = _load_sweep_file(sweep_dir, f"chunk_{size}.json", "chunk")
+        if row is not None:
+            rows.append(row)
 
     winner = max(rows, key=lambda r: r.E_hr5) if rows else None
     return SweepResponse(
