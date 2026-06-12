@@ -54,4 +54,21 @@ export const ADMIN = {
   EMPTY_CATEGORIES: '暂无分类数据',
   RETRY_STATS: '统计加载失败',
   RETRY_EVAL: '评估概览加载失败',
+  ALERTS: {
+    DELETE_FAILED: '删除失败',
+    UNDO_FAILED: '撤销失败，该题已存在',
+  },
+} as const
+
+/** 可访问性文案(skip link / aria-label) */
+export const A11Y = {
+  SKIP_TO_MAIN: '跳到主要内容',
+  CLOSE: '关闭',
+  CLOSE_DIALOG: '关闭对话框',
+  MENU: '打开/关闭侧边栏',
+  DIALOG_OPENED: '对话框已打开，按 Escape 关闭',
+  NEW_CHAT: '新建对话',
+  DELETE_CONVERSATION: '删除对话',
+  SWITCH_TO_CONVERSATIONS: '切换到对话',
+  SWITCH_TO_QUESTIONS: '切换到题目库',
 } as const

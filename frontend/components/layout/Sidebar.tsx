@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation'
 import type { Conversation } from '@/hooks/useConversations'
+import { A11Y } from '@/lib/copy'
 
 interface SidebarProps {
   isOpen: boolean
@@ -61,7 +62,12 @@ export function Sidebar({
               InterviewRAG
             </span>
           </div>
-          <button onClick={onToggle} className="p-1.5 rounded-lg transition-colors lg:hidden" style={{ color: 'var(--ink-muted)' }}>
+          <button
+            onClick={onToggle}
+            className="p-1.5 rounded-lg transition-colors lg:hidden"
+            style={{ color: 'var(--ink-muted)' }}
+            aria-label={A11Y.MENU}
+          >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -75,6 +81,7 @@ export function Sidebar({
               onClick={onCreateConversation}
               className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-xl transition-all"
               style={{ background: 'var(--ink)', color: 'var(--cream)' }}
+              aria-label={A11Y.NEW_CHAT}
               onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85' }}
               onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
             >
@@ -98,6 +105,8 @@ export function Sidebar({
                 color: activeTab === tab ? 'var(--ink)' : 'var(--ink-muted)',
                 border: activeTab === tab ? '1px solid var(--border-subtle)' : '1px solid transparent',
               }}
+              aria-label={tab === 'conversations' ? A11Y.SWITCH_TO_CONVERSATIONS : A11Y.SWITCH_TO_QUESTIONS}
+              aria-current={activeTab === tab ? 'page' : undefined}
             >
               {tab === 'conversations' ? '对话' : '题目库'}
             </button>
@@ -137,8 +146,9 @@ export function Sidebar({
                       {conv.title}
                     </span>
                     <button
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded transition-all shrink-0"
+                      className="opacity-50 group-hover:opacity-100 focus-visible:opacity-100 p-1 rounded transition-all shrink-0"
                       style={{ color: 'var(--ink-muted)' }}
+                      aria-label={A11Y.DELETE_CONVERSATION}
                       onClick={(e) => {
                         e.stopPropagation()
                         onDeleteConversation(conv.id)

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { Modal } from '@/components/a11y/Modal'
 import { adminChangePassword } from '@/lib/api'
 
 interface ChangePasswordDialogProps {
@@ -57,92 +58,78 @@ export function ChangePasswordDialog({ isOpen, onClose }: ChangePasswordDialogPr
     }
   }, [currentPassword, newPassword, confirmPassword, onClose])
 
-  if (!isOpen) return null
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(26, 22, 18, 0.3)', backdropFilter: 'blur(4px)' }}
-      onClick={onClose}
+    <Modal
+      open={isOpen}
+      onClose={onClose}
+      title="修改密码"
+      widthClassName="w-96 max-w-[90vw]"
     >
-      <div
-        className="w-96 p-6 rounded-2xl"
-        style={{ background: 'var(--paper)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          className="text-lg font-semibold mb-5"
-          style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}
-        >
-          修改密码
-        </h2>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div>
+          <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>当前密码</label>
+          <input
+            type="password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+            style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
+            autoFocus
+            disabled={loading}
+          />
+        </div>
 
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>当前密码</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
-              style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
-              autoFocus
-              disabled={loading}
-            />
-          </div>
+        <div>
+          <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>新密码（至少 6 个字符）</label>
+          <input
+            type="password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+            style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
+            disabled={loading}
+          />
+        </div>
 
-          <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>新密码（至少 6 个字符）</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
-              style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
-              disabled={loading}
-            />
-          </div>
+        <div>
+          <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>确认新密码</label>
+          <input
+            type="password"
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+            style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
+            disabled={loading}
+          />
+        </div>
 
-          <div>
-            <label className="block text-xs mb-1" style={{ color: 'var(--ink-muted)' }}>确认新密码</label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
-              style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
-              disabled={loading}
-            />
-          </div>
+        {error && (
+          <p className="text-xs" style={{ color: 'var(--accent)' }}>{error}</p>
+        )}
+        {success && (
+          <p className="text-xs" style={{ color: 'var(--success)' }}>{success}</p>
+        )}
 
-          {error && (
-            <p className="text-xs" style={{ color: 'var(--accent)' }}>{error}</p>
-          )}
-          {success && (
-            <p className="text-xs" style={{ color: 'var(--success)' }}>{success}</p>
-          )}
-
-          <div className="flex gap-2 justify-end pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 text-sm rounded-lg transition-colors"
-              style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium rounded-lg transition-all disabled:opacity-50"
-              style={{ background: 'var(--ink)', color: 'var(--cream)' }}
-            >
-              {loading ? '保存中...' : '保存'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex gap-2 justify-end pt-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={loading}
+            className="px-4 py-2 text-sm rounded-lg transition-colors"
+            style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-all disabled:opacity-50"
+            style={{ background: 'var(--ink)', color: 'var(--cream)' }}
+          >
+            {loading ? '保存中...' : '保存'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   )
 }

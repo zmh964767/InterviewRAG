@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useCallback } from 'react'
+import { Modal } from '@/components/a11y/Modal'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatContext } from '@/contexts/ChatContext'
+import { A11Y } from '@/lib/copy'
 
 export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
@@ -93,7 +95,12 @@ export default function Home() {
         onDeleteConversation={handleDeleteConversation}
       />
 
-      <div className="flex-1 flex flex-col min-w-0">
+      <main
+        id="main-content"
+        tabIndex={-1}
+        aria-label="对话内容"
+        className="flex-1 flex flex-col min-w-0"
+      >
         <header
           className="h-14 px-6 flex items-center shrink-0 border-b"
           style={{ borderColor: 'var(--border)', background: 'rgba(250, 248, 245, 0.8)', backdropFilter: 'blur(12px)' }}
@@ -103,6 +110,7 @@ export default function Home() {
               onClick={() => setSidebarOpen(!sidebarOpen)}
               className="p-2 rounded-lg transition-colors lg:hidden"
               style={{ color: 'var(--ink-muted)' }}
+              aria-label={A11Y.MENU}
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -127,44 +135,34 @@ export default function Home() {
         </ErrorBoundary>
 
         <ChatInput onSend={handleSend} isLoading={isLoading} onStop={handleStop} />
-      </div>
+      </main>
 
-      {deleteConfirmId && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: 'rgba(26, 22, 18, 0.3)', backdropFilter: 'blur(4px)' }}
-          onClick={() => setDeleteConfirmId(null)}
-        >
-          <div
-            className="w-80 p-6 rounded-2xl animate-slide-up"
-            style={{ background: 'var(--cream)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
-            onClick={(e) => e.stopPropagation()}
+      <Modal
+        open={!!deleteConfirmId}
+        onClose={() => setDeleteConfirmId(null)}
+        title="删除对话？"
+        widthClassName="w-80"
+      >
+        <p className="text-sm mb-5" style={{ color: 'var(--ink-muted)' }}>
+          此操作无法撤销，对话中的所有消息将被永久删除。
+        </p>
+        <div className="flex gap-3 justify-end">
+          <button
+            onClick={() => setDeleteConfirmId(null)}
+            className="px-4 py-2 text-sm rounded-lg transition-all"
+            style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
           >
-            <h3 className="text-base font-semibold mb-2" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
-              删除对话？
-            </h3>
-            <p className="text-sm mb-5" style={{ color: 'var(--ink-muted)' }}>
-              此操作无法撤销，对话中的所有消息将被永久删除。
-            </p>
-            <div className="flex gap-3 justify-end">
-              <button
-                onClick={() => setDeleteConfirmId(null)}
-                className="px-4 py-2 text-sm rounded-lg transition-all"
-                style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
-              >
-                取消
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-medium rounded-lg transition-all"
-                style={{ background: 'var(--accent)', color: 'var(--cream)' }}
-              >
-                删除
-              </button>
-            </div>
-          </div>
+            取消
+          </button>
+          <button
+            onClick={confirmDelete}
+            className="px-4 py-2 text-sm font-medium rounded-lg transition-all"
+            style={{ background: 'var(--accent)', color: 'var(--cream)' }}
+          >
+            删除
+          </button>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

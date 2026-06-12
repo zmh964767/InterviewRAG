@@ -33,21 +33,36 @@ export function UndoToast({ question, onUndo, onDismiss }: UndoToastProps) {
     return () => clearInterval(tick)
   }, [question, onDismiss])
 
+  // Escape 关闭 toast(仅在显示时)
+  useEffect(() => {
+    if (!question) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (e.isComposing) return
+      onDismiss()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [question, onDismiss])
+
   if (!question) return null
 
   return (
     <div
+      role="alert"
+      aria-live="polite"
+      aria-label="删除已撤销"
       className="fixed bottom-6 right-6 z-50 flex flex-col rounded-xl overflow-hidden shadow-lg"
       style={{ background: 'var(--paper)', border: '1px solid var(--border)', minWidth: 320 }}
     >
       <div className="px-4 py-3 flex items-center gap-3">
-        <span style={{ color: 'var(--success)' }}>
+        <span style={{ color: 'var(--success)' }} aria-hidden="true">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </span>
         <div className="flex-1 text-sm" style={{ color: 'var(--ink)' }}>
-          已删除 1 题
+          <span role="status">已删除 1 题</span>
         </div>
         <button
           onClick={onUndo}
@@ -57,7 +72,7 @@ export function UndoToast({ question, onUndo, onDismiss }: UndoToastProps) {
           撤销
         </button>
       </div>
-      <div className="h-0.5" style={{ background: 'var(--border-subtle)' }}>
+      <div className="h-0.5" style={{ background: 'var(--border-subtle)' }} aria-hidden="true">
         <div
           className="h-full transition-all"
           style={{ width: `${progress}%`, background: 'var(--accent)' }}

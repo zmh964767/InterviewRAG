@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext'
 import Link from 'next/link'
+import { A11Y } from '@/lib/copy'
 import { ChangePasswordDialog } from './ChangePasswordDialog'
 
 function AdminLayoutInner({ children }: { children: React.ReactNode }) {
@@ -42,6 +43,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen" style={{ background: 'var(--cream)' }}>
+      <a href="#main-content" className="skip-link">{A11Y.SKIP_TO_MAIN}</a>
       {/* Admin Sidebar */}
       <aside className="w-64 shrink-0 flex flex-col border-r" style={{ background: 'var(--paper)', borderColor: 'var(--border)' }}>
         <div className="h-14 px-5 flex items-center border-b" style={{ borderColor: 'var(--border)' }}>
@@ -107,7 +109,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto">
         {children}
       </main>
 

@@ -6,6 +6,7 @@ import { CHAT } from '@/lib/copy'
 interface ErrorBannerProps {
   message: string
   onRetry?: () => void
+  onDismiss?: () => void
   variant?: 'card' | 'inline'
 }
 
@@ -15,7 +16,7 @@ interface ErrorBannerProps {
  * - card: 完整卡片样式,适合占据整个面板
  * - inline: 紧凑行内样式,适合嵌入统计卡等小区域
  */
-export function ErrorBanner({ message, onRetry, variant = 'card' }: ErrorBannerProps) {
+export function ErrorBanner({ message, onRetry, onDismiss, variant = 'card' }: ErrorBannerProps) {
   if (variant === 'inline') {
     const dotStyle: CSSProperties = { background: 'var(--accent)' }
     const textStyle: CSSProperties = { color: 'var(--ink-muted)' }
@@ -40,6 +41,17 @@ export function ErrorBanner({ message, onRetry, variant = 'card' }: ErrorBannerP
             style={btnStyle}
           >
             {CHAT.ERROR.RETRY}
+          </button>
+        )}
+        {onDismiss && (
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="关闭错误提示"
+            className="ml-1 hover:opacity-80"
+            style={btnStyle}
+          >
+            ×
           </button>
         )}
       </div>
@@ -74,6 +86,17 @@ export function ErrorBanner({ message, onRetry, variant = 'card' }: ErrorBannerP
           style={btnStyle}
         >
           {CHAT.ERROR.RETRY}
+        </button>
+      )}
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="关闭错误提示"
+          className="text-sm px-2 py-1 rounded-md hover:opacity-80"
+          style={btnStyle}
+        >
+          ×
         </button>
       )}
     </div>

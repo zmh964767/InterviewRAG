@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 
+import { Modal } from '@/components/a11y/Modal'
 import { ImportProgress } from '@/components/kb/ImportProgress'
 import { useIngestTask } from '@/hooks/useIngestTask'
 import { adminSubmitIngestTask, adminUploadIngestFile } from '@/lib/api'
@@ -96,19 +97,13 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
     }
   }, [ingest.isTerminal, ingest.task?.status, hasCompleted, onComplete])
 
-  if (!isOpen) return null
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(26, 22, 18, 0.3)', backdropFilter: 'blur(4px)' }}
-      onClick={handleClose}
-    >
-      <div
-        className="w-[36rem] max-w-[90vw] p-6 rounded-2xl"
-        style={{ background: 'var(--paper)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal
+      open={isOpen}
+      onClose={handleClose}
+      title="导入面试题"
+      widthClassName="w-[36rem] max-w-[90vw]"
+      titleNode={
         <header className="flex items-center justify-between mb-4">
           <h3 className="text-base font-semibold" style={{ color: 'var(--ink)' }}>
             导入面试题
@@ -117,97 +112,98 @@ export function IngestModal({ isOpen, onClose, onComplete }: IngestModalProps) {
             onClick={handleClose}
             className="p-1.5 rounded-lg"
             style={{ color: 'var(--ink-muted)' }}
+            aria-label="关闭"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </header>
+      }
+    >
+      {/* Tab 切换 */}
+      <div className="flex gap-1 mb-4">
+        {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className="flex-1 py-2 text-sm rounded-lg transition-all"
+            style={{
+              background: tab === t ? 'var(--cream)' : 'transparent',
+              color: tab === t ? 'var(--ink)' : 'var(--ink-muted)',
+              border: tab === t ? '1px solid var(--border)' : '1px solid transparent',
+            }}
+          >
+            {TAB_LABELS[t]}
+          </button>
+        ))}
+      </div>
 
-        {/* Tab 切换 */}
-        <div className="flex gap-1 mb-4">
-          {(Object.keys(TAB_LABELS) as Tab[]).map((t) => (
-            <button
-              key={t}
-              onClick={() => setTab(t)}
-              className="flex-1 py-2 text-sm rounded-lg transition-all"
-              style={{
-                background: tab === t ? 'var(--cream)' : 'transparent',
-                color: tab === t ? 'var(--ink)' : 'var(--ink-muted)',
-                border: tab === t ? '1px solid var(--border)' : '1px solid transparent',
-              }}
-            >
-              {TAB_LABELS[t]}
-            </button>
-          ))}
-        </div>
-
-        {/* Tab 内容 */}
-        <div className="mb-4 min-h-[80px]">
-          {tab === 'file' && (
+      {/* Tab 内容 */}
+      <div className="mb-4 min-h-[80px]">
+        {tab === 'file' && (
+          <input
+            type="file"
+            accept=".md,.pdf"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            className="block w-full text-sm"
+            style={{ color: 'var(--ink)' }}
+          />
+        )}
+        {tab === 'url' && (
+          <input
+            type="url"
+            placeholder="https://example.com/questions"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+            style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
+          />
+        )}
+        {tab === 'path' && (
+          <div>
             <input
-              type="file"
-              accept=".md,.pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm"
-              style={{ color: 'var(--ink)' }}
-            />
-          )}
-          {tab === 'url' && (
-            <input
-              type="url"
-              placeholder="https://example.com/questions"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              className="w-full px-3 py-2 text-sm rounded-lg outline-none"
+              type="text"
+              placeholder="raw/Extra01-参考答案.md（仅允许 data/raw/ 目录下文件）"
+              value={path}
+              onChange={(e) => setPath(e.target.value)}
+              className="w-full px-3 py-2 text-sm rounded-lg outline-none font-mono"
               style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
             />
-          )}
-          {tab === 'path' && (
-            <div>
-              <input
-                type="text"
-                placeholder="raw/Extra01-参考答案.md（仅允许 data/raw/ 目录下文件）"
-                value={path}
-                onChange={(e) => setPath(e.target.value)}
-                className="w-full px-3 py-2 text-sm rounded-lg outline-none font-mono"
-                style={{ background: 'var(--cream)', border: '1px solid var(--border)', color: 'var(--ink)' }}
-              />
-              <p className="text-xs mt-2" style={{ color: 'var(--ink-muted)' }}>
-                后端会校验：必须相对、不可含 ..、不可为符号链接、必须在 data/ 内
-              </p>
-            </div>
-          )}
-        </div>
-
-        {submitError && (
-          <p className="text-xs mb-3" style={{ color: 'var(--accent)' }}>{submitError}</p>
+            <p className="text-xs mt-2" style={{ color: 'var(--ink-muted)' }}>
+              后端会校验：必须相对、不可含 ..、不可为符号链接、必须在 data/ 内
+            </p>
+          </div>
         )}
-
-        {/* 进度区 */}
-        <div className="mb-4">
-          <ImportProgress task={ingest.task} error={ingest.error} />
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex gap-3 justify-end">
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 text-sm rounded-lg"
-            style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
-          >
-            关闭
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={submitting || ingest.isPolling}
-            className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-40"
-            style={{ background: 'var(--ink)', color: 'var(--cream)' }}
-          >
-            {ingest.isPolling ? '导入中...' : '开始导入'}
-          </button>
-        </div>
       </div>
-    </div>
+
+      {submitError && (
+        <p className="text-xs mb-3" style={{ color: 'var(--accent)' }}>{submitError}</p>
+      )}
+
+      {/* 进度区 */}
+      <div className="mb-4">
+        <ImportProgress task={ingest.task} error={ingest.error} />
+      </div>
+
+      {/* 操作按钮 */}
+      <div className="flex gap-3 justify-end">
+        <button
+          onClick={handleClose}
+          className="px-4 py-2 text-sm rounded-lg"
+          style={{ border: '1px solid var(--border)', color: 'var(--ink-light)' }}
+        >
+          关闭
+        </button>
+        <button
+          onClick={handleSubmit}
+          disabled={submitting || ingest.isPolling}
+          className="px-4 py-2 text-sm font-medium rounded-lg disabled:opacity-40"
+          style={{ background: 'var(--ink)', color: 'var(--cream)' }}
+        >
+          {ingest.isPolling ? '导入中...' : '开始导入'}
+        </button>
+      </div>
+    </Modal>
   )
 }

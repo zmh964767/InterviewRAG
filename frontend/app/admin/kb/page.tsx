@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 
 import { DeleteConfirmDialog } from '@/components/kb/DeleteConfirmDialog'
 import { IngestModal } from '@/components/kb/IngestModal'
@@ -8,7 +8,9 @@ import { QuestionCard } from '@/components/kb/QuestionCard'
 import { QuestionDetail } from '@/components/kb/QuestionDetail'
 import { QuestionTable } from '@/components/kb/QuestionTable'
 import { UndoToast } from '@/components/kb/UndoToast'
+import { ErrorBanner } from '@/components/ui/ErrorBanner'
 import { adminDeleteQuestion, adminInsertOne, adminListQuestions } from '@/lib/api'
+import { ADMIN } from '@/lib/copy'
 import type { Question, QuestionListResponse } from '@/lib/types'
 
 const DEFAULT_SIZE = 20
@@ -33,6 +35,8 @@ export default function AdminKbPage() {
   const [toDelete, setToDelete] = useState<Question | null>(null)
   const [undoBuffer, setUndoBuffer] = useState<Question | null>(null)
   const [ingestOpen, setIngestOpen] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const actionErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 搜索 debounce
   useEffect(() => {
@@ -65,6 +69,27 @@ export default function AdminKbPage() {
 
   const refresh = useCallback(() => { void load() }, [load])
 
+  // 设置 actionError 并 5 秒后自动清除
+  const setActionErrorWithAutoDismiss = useCallback((msg: string) => {
+    setActionError(msg)
+    if (actionErrorTimerRef.current) {
+      clearTimeout(actionErrorTimerRef.current)
+    }
+    actionErrorTimerRef.current = setTimeout(() => {
+      setActionError(null)
+      actionErrorTimerRef.current = null
+    }, 5000)
+  }, [])
+
+  // 卸载时清理 timer
+  useEffect(() => {
+    return () => {
+      if (actionErrorTimerRef.current) {
+        clearTimeout(actionErrorTimerRef.current)
+      }
+    }
+  }, [])
+
   // 删除逻辑
   const handleConfirmDelete = useCallback(async (q: Question) => {
     setToDelete(null)
@@ -78,9 +103,11 @@ export default function AdminKbPage() {
       setItems((prev) => [q, ...prev])
       setTotal((prev) => prev + 1)
       setUndoBuffer(null)
-      alert(`删除失败: ${e instanceof Error ? e.message : '未知错误'}`)
+      setActionErrorWithAutoDismiss(
+        `${ADMIN.ALERTS.DELETE_FAILED}: ${e instanceof Error ? e.message : '未知错误'}`,
+      )
     }
-  }, [])
+  }, [setActionErrorWithAutoDismiss])
 
   // 撤销逻辑
   const handleUndo = useCallback(() => {
@@ -100,9 +127,9 @@ export default function AdminKbPage() {
       .catch(() => {
         refresh()
         setUndoBuffer(null)
-        alert('撤销失败，该题已存在')
+        setActionErrorWithAutoDismiss(ADMIN.ALERTS.UNDO_FAILED)
       })
-  }, [undoBuffer, refresh])
+  }, [undoBuffer, refresh, setActionErrorWithAutoDismiss])
 
   return (
     <div className="flex flex-col h-full">
@@ -161,6 +188,16 @@ export default function AdminKbPage() {
         {isLoading && <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>加载中...</span>}
         {error && <span className="text-xs" style={{ color: 'var(--accent)' }}>{error}</span>}
       </div>
+
+      {/* 动作错误条(替代 window.alert) */}
+      {actionError && (
+        <div className="px-6 pt-3">
+          <ErrorBanner
+            message={actionError}
+            onDismiss={() => setActionError(null)}
+          />
+        </div>
+      )}
 
       {/* 列表 */}
       <div className="flex-1 overflow-hidden hidden md:flex flex-col">
