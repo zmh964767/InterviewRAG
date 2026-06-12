@@ -175,3 +175,31 @@ class TestBatchDelete:
     def test_batch_delete_empty_list(self, db):
         deleted = db.batch_delete([])
         assert deleted == 0
+
+
+class TestUpdateQuestion:
+    def test_update_category(self, db):
+        db.insert_question(_make_q("q1", "Q1", "A1", category="前端"))
+        assert db.update_question("q1", {"category": "算法"}) is True
+        q = db.get_question_by_id("q1")
+        assert q["category"] == "算法"
+
+    def test_update_difficulty(self, db):
+        db.insert_question(_make_q("q1", "Q1", "A1"))
+        assert db.update_question("q1", {"difficulty": "困难"}) is True
+        q = db.get_question_by_id("q1")
+        assert q["difficulty"] == "困难"
+
+    def test_update_question_recalculates_hash(self, db):
+        db.insert_question(_make_q("q1", "Q1", "A1"))
+        old_hash = db.get_question_by_id("q1")["content_hash"]
+        db.update_question("q1", {"question": "Q1 Updated"})
+        new_hash = db.get_question_by_id("q1")["content_hash"]
+        assert old_hash != new_hash
+
+    def test_update_nonexistent_returns_false(self, db):
+        assert db.update_question("notexist", {"category": "x"}) is False
+
+    def test_update_empty_fields_returns_false(self, db):
+        db.insert_question(_make_q("q1", "Q1", "A1"))
+        assert db.update_question("q1", {}) is False

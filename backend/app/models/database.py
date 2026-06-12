@@ -208,6 +208,35 @@ class Database:
         self.conn.commit()
         return cursor.rowcount
 
+    def update_question(self, question_id: str, fields: dict) -> bool:
+        """更新题目字段，返回是否成功"""
+        import sqlite3 as _sqlite3
+        allowed = {"question", "answer", "category", "difficulty"}
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        if not updates:
+            return False
+
+        # 如果改了 question 或 answer，重算 content_hash
+        if "question" in updates or "answer" in updates:
+            q = self.get_question_by_id(question_id)
+            if not q:
+                return False
+            new_q = updates.get("question", q["question"])
+            new_a = updates.get("answer", q["answer"])
+            updates["content_hash"] = hashlib.md5(
+                f"{new_q}|{new_a}".encode()
+            ).hexdigest()
+
+        set_clause = ", ".join(f"{k} = ?" for k in updates)
+        values = list(updates.values()) + [question_id]
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute(f"UPDATE questions SET {set_clause} WHERE id = ?", values)
+            self.conn.commit()
+            return cursor.rowcount > 0
+        except _sqlite3.IntegrityError:
+            return False
+
     def close(self):
         """关闭连接"""
         self.conn.close()

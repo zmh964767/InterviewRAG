@@ -16,7 +16,9 @@ from app.models.schemas import (
     BatchDeleteRequest,
     BatchDeleteResponse,
     DeleteQuestionResponse,
+    Question,
     QuestionListResponse,
+    UpdateQuestionRequest,
 )
 from app.services.rag_service import RAGService
 
@@ -79,3 +81,19 @@ async def batch_delete_questions(
         # 不回滚，继续删 SQLite
     deleted = db.batch_delete(request.ids)
     return BatchDeleteResponse(deleted=deleted)
+
+
+@router.put("/questions/{question_id}", response_model=Question)
+async def update_question(
+    question_id: str,
+    request: UpdateQuestionRequest,
+    db: Database = Depends(get_db),
+):
+    """更新题目（分类/难度/题面/答案）"""
+    fields = request.model_dump(exclude_none=True)
+    if not fields:
+        raise HTTPException(status_code=400, detail="未提供更新字段")
+    if not db.update_question(question_id, fields):
+        raise NotFoundError("题目", question_id)
+    updated = db.get_question_by_id(question_id)
+    return Question(**updated)

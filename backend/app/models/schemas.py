@@ -135,3 +135,11 @@ class BatchDeleteRequest(BaseModel):
 class BatchDeleteResponse(BaseModel):
     """批量删除响应"""
     deleted: int
+
+
+class UpdateQuestionRequest(BaseModel):
+    """更新题目请求"""
+    question: str | None = None
+    answer: str | None = None
+    category: str | None = None
+    difficulty: str | None = None

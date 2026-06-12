@@ -3,6 +3,7 @@
 import hashlib
 import logging
 import re
+from pathlib import Path
 
 from app.models.schemas import Question
 
@@ -15,6 +16,18 @@ QUESTION_PATTERNS = [
     re.compile(r"^问题[\d]*[：:]\s*(.+)"),
     re.compile(r"^(什么是|请解释|请介绍|如何|为什么|谈谈).+?[？?]?$"),
 ]
+
+CHAPTER_PATTERNS = [
+    re.compile(r"^(?:第[一二三四五六七八九十\d]+章|Chapter\s+\d+|Part\s+\d+)[：:\s]*(.+)"),
+    re.compile(r"^(?:第[一二三四五六七八九十\d]+节|Section\s+\d+)[：:\s]*(.+)"),
+]
+
+
+def _infer_category_from_filename(filename: str) -> str:
+    """从文件名推断分类"""
+    name = Path(filename).stem
+    name = re.sub(r"^(?:第?\d+[-_、]|Extra\d+[-_、]|\d+[-_、])", "", name)
+    return name.strip() or "PDF面试题"
 
 
 def is_question(text: str) -> bool:
@@ -38,8 +51,10 @@ def extract_question_text(text: str) -> str:
     return text
 
 
-def parse_pdf(file_path: str, category: str = "PDF面试题") -> list[Question]:
+def parse_pdf(file_path: str, category: str | None = None) -> list[Question]:
     """解析 PDF 文件"""
+    if category is None:
+        category = _infer_category_from_filename(file_path)
     try:
         from pypdf import PdfReader
     except ImportError:
@@ -65,8 +80,10 @@ def parse_pdf(file_path: str, category: str = "PDF面试题") -> list[Question]:
     return parse_text_content(full_text, file_path, category)
 
 
-def parse_pdf_content(content: bytes, filename: str, category: str = "PDF面试题") -> list[Question]:
+def parse_pdf_content(content: bytes, filename: str, category: str | None = None) -> list[Question]:
     """解析 PDF 内容（字节流）"""
+    if category is None:
+        category = _infer_category_from_filename(filename)
     try:
         from pypdf import PdfReader
         import io
@@ -98,6 +115,7 @@ def parse_text_content(text: str, source: str, category: str) -> list[Question]:
     questions: list[Question] = []
     current_question = ""
     current_answer_lines: list[str] = []
+    current_category = category
 
     lines = text.split("\n")
 
@@ -105,6 +123,12 @@ def parse_text_content(text: str, source: str, category: str) -> list[Question]:
         line = line.strip()
         if not line:
             continue
+
+        for pattern in CHAPTER_PATTERNS:
+            m = pattern.match(line)
+            if m:
+                current_category = m.group(1).strip() or m.group(0).strip()
+                break
 
         if is_question(line):
             # 保存上一题
@@ -117,10 +141,10 @@ def parse_text_content(text: str, source: str, category: str) -> list[Question]:
                             id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
                             question=q_text,
                             answer=a_text,
-                            category=category,
+                            category=current_category,
                             difficulty="中等",
                             source=source,
-                            tags=[category],
+                            tags=[current_category],
                         )
                     )
 
@@ -139,10 +163,10 @@ def parse_text_content(text: str, source: str, category: str) -> list[Question]:
                     id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
                     question=q_text,
                     answer=a_text,
-                    category=category,
+                    category=current_category,
                     difficulty="中等",
                     source=source,
-                    tags=[category],
+                    tags=[current_category],
                 )
             )
 
