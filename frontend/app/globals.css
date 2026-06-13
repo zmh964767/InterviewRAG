@@ -29,6 +29,7 @@
   --shadow: 0 2px 8px rgba(26, 22, 18, 0.06);
   --shadow-md: 0 4px 16px rgba(26, 22, 18, 0.08);
   --shadow-lg: 0 8px 32px rgba(26, 22, 18, 0.1);
+  --nav-active-bg: var(--cream);
 }
 
 * {
@@ -272,6 +273,8 @@ body::before {
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.45);
+  --nav-active-bg: #2D2622;
 }
 
 /* 全站主题切换过渡(影响背景/文字/边框) */

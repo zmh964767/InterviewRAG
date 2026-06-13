@@ -66,7 +66,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all"
                 style={{
-                  background: isActive ? 'var(--cream)' : 'transparent',
+                  background: isActive ? 'var(--nav-active-bg)' : 'transparent',
                   color: isActive ? 'var(--ink)' : 'var(--ink-muted)',
                   border: isActive ? '1px solid var(--border-subtle)' : '1px solid transparent',
                 }}

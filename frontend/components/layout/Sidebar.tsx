@@ -101,7 +101,7 @@ export function Sidebar({
               onClick={() => handleTabClick(tab)}
               className="flex-1 py-2 text-xs font-medium rounded-lg transition-all"
               style={{
-                background: activeTab === tab ? 'var(--cream)' : 'transparent',
+                background: activeTab === tab ? 'var(--nav-active-bg)' : 'transparent',
                 color: activeTab === tab ? 'var(--ink)' : 'var(--ink-muted)',
                 border: activeTab === tab ? '1px solid var(--border-subtle)' : '1px solid transparent',
               }}
@@ -128,12 +128,12 @@ export function Sidebar({
                     key={conv.id}
                     className="group flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer transition-all"
                     style={{
-                      background: conv.id === currentId ? 'var(--cream)' : 'transparent',
+                      background: conv.id === currentId ? 'var(--nav-active-bg)' : 'transparent',
                       border: conv.id === currentId ? '1px solid var(--border-subtle)' : '1px solid transparent',
                     }}
                     onClick={() => onSwitchConversation(conv.id)}
                     onMouseEnter={(e) => {
-                      if (conv.id !== currentId) e.currentTarget.style.background = 'var(--cream)'
+                      if (conv.id !== currentId) e.currentTarget.style.background = 'var(--nav-active-bg)'
                     }}
                     onMouseLeave={(e) => {
                       if (conv.id !== currentId) e.currentTarget.style.background = 'transparent'
