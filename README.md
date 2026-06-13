@@ -10,9 +10,10 @@
 - **多轮对话**：支持上下文记忆的连续追问
 - **流式输出**：SSE 实时返回答案，首字延迟 < 1s
 - **流式控制**：停止/重新生成，切对话时流后台继续
+- **暗色模式**：全站 light/dark 切换，跟随系统偏好，localStorage 持久化，inline script 防闪烁
 - **代码语法高亮**：highlight.js + github-dark 主题，Python/JS/JSON 等 190+ 种语言
 - **RAGAS 评估**：Faithfulness、Relevancy、Precision、Recall 四项指标
-- **评估报告 Web UI**：`/admin/eval` 页面展示最新指标 + 历史快照
+- **评估报告 Web UI**：`/admin/eval` 页面展示最新指标 + 历史快照 + 对比 + Sweep
 - **对比实验**：四种检索策略效果对比
 - **骨架屏加载**：列表/报告加载时显示 shimmer 占位
 - **无障碍**：focus-visible ring + Modal 焦点陷阱 + skip link + prefers-reduced-motion
@@ -226,10 +227,11 @@ python -m evaluation.sweep
 
 | 方向 | 说明 | 预估工作量 |
 |---|---|---|
-| **暗色模式** | CSS 变量双套映射 + 主题切换 + 用户偏好持久化 | 2 天 |
+| ~~**暗色模式**~~ | ~~CSS 变量双套映射 + 主题切换 + 用户偏好持久化~~ ✅ | ~~2 天~~ |
 | **完整 i18n** | 引入 next-intl，copy.ts 已铺路（7 组常量），只换 dictionary loader | 1 天 |
 | **管理端移动端适配** | admin 侧边栏 256px 固定宽度 → 响应式折叠 | 半天 |
-| **评估历史对比** | 两次评估快照的指标 diff 展示 | 1 天 |
+| ~~**评估历史对比**~~ | ~~两次评估快照的指标 diff 展示~~ ✅ | ~~1 天~~ |
+| ~~**Sweep 参数扫描 UI**~~ | ~~`evaluation/sweep.py` 结果展示 + winner 推荐~~ ✅ | ~~1 天~~ |
 
 ### 低优先级
 
