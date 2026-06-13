@@ -23,7 +23,7 @@ import type {
   FeedbackStats,
 } from './types'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082'
+const API_BASE = ''  // 空字符串 → 相对路径，走 Next.js rewrites 代理（Docker 生产由 NEXT_PUBLIC_API_URL 覆盖）
 
 /** 普通查询 */
 export async function query(request: QueryRequest): Promise<QueryResponse> {

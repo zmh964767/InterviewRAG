@@ -3,7 +3,7 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082'
+const API_BASE = ''  // 空字符串 → 相对路径，走 Next.js rewrites 代理
 const TOKEN_KEY = 'admin_token'
 
 interface AdminAuthState {
