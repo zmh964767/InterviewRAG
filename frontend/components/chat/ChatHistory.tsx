@@ -129,7 +129,7 @@ export function ChatHistory({ messages, isLoading, onSend, onRegenerate }: ChatH
                 onMouseLeave={(e) => {
                   e.currentTarget.style.borderColor = 'var(--border)'
                   e.currentTarget.style.color = 'var(--ink-light)'
-                  e.currentTarget.style.background = 'var(--cream)'
+                  e.currentTarget.style.background = 'var(--nav-active-bg)'
                 }}
               >
                 {q}
