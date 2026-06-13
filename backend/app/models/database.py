@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -41,6 +42,22 @@ class Database:
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS feedback (
+                id TEXT PRIMARY KEY,
+                message_id TEXT NOT NULL UNIQUE,
+                conversation_id TEXT NOT NULL,
+                rating INTEGER NOT NULL,
+                comment TEXT,
+                message_content TEXT NOT NULL,
+                message_role TEXT NOT NULL,
+                client_ip TEXT,
+                user_agent TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_rating ON feedback(rating)")
         self.conn.commit()
         logger.info("SQLite 数据库已初始化")
 
@@ -240,3 +257,105 @@ class Database:
     def close(self):
         """关闭连接"""
         self.conn.close()
+
+    # =========================================================================
+    # 用户反馈
+    # =========================================================================
+
+    def insert_feedback(self, data: dict) -> str:
+        """插入/覆盖反馈(利用 message_id UNIQUE 约束 + INSERT OR REPLACE),返回 feedback.id"""
+        feedback_id = str(uuid.uuid4())
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO feedback (
+                id, message_id, conversation_id, rating, comment,
+                message_content, message_role, client_ip, user_agent
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                feedback_id,
+                data["message_id"],
+                data["conversation_id"],
+                data["rating"],
+                data.get("comment"),
+                data["message_content"],
+                data["message_role"],
+                data.get("client_ip"),
+                data.get("user_agent"),
+            ),
+        )
+        self.conn.commit()
+
+        # INSERT OR REPLACE 会按 message_id 覆盖;查回当前最新 id(可能是之前传进去的旧 id)
+        cursor.execute(
+            "SELECT id FROM feedback WHERE message_id = ?",
+            (data["message_id"],),
+        )
+        row = cursor.fetchone()
+        return row["id"] if row else feedback_id
+
+    def get_feedback(
+        self,
+        rating: int | None = None,
+        since: str | None = None,
+        page: int = 1,
+        size: int = 50,
+    ) -> dict:
+        """分页查询反馈列表"""
+        where_clauses: list[str] = []
+        params: list = []
+
+        if rating is not None:
+            where_clauses.append("rating = ?")
+            params.append(rating)
+        if since:
+            where_clauses.append("created_at >= ?")
+            params.append(since)
+
+        where_sql = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+        cursor = self.conn.cursor()
+
+        cursor.execute(f"SELECT COUNT(*) FROM feedback {where_sql}", params)
+        total = cursor.fetchone()[0]
+
+        offset = (page - 1) * size
+        cursor.execute(
+            f"SELECT * FROM feedback {where_sql} "
+            f"ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, size, offset),
+        )
+        items = [self._row_to_dict(row) for row in cursor.fetchall()]
+
+        return {"items": items, "total": total, "page": page, "size": size}
+
+    def get_feedback_stats(self, since: str | None = None) -> dict:
+        """按 rating 聚合统计(差评率 = negative / total)"""
+        cursor = self.conn.cursor()
+        if since:
+            cursor.execute(
+                "SELECT rating, COUNT(*) FROM feedback WHERE created_at >= ? GROUP BY rating",
+                (since,),
+            )
+        else:
+            cursor.execute("SELECT rating, COUNT(*) FROM feedback GROUP BY rating")
+
+        positive = 0
+        negative = 0
+        for row in cursor.fetchall():
+            if row["rating"] == 1:
+                positive = row["COUNT(*)"]
+            elif row["rating"] == -1:
+                negative = row["COUNT(*)"]
+
+        total = positive + negative
+        rate = (negative / total) if total > 0 else 0.0
+        return {"positive": positive, "negative": negative, "total": total, "rate": rate}
+
+    def get_feedback_by_message_id(self, message_id: str) -> dict | None:
+        """根据 message_id 查询反馈(辅助:验证 INSERT OR REPLACE 覆盖)"""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM feedback WHERE message_id = ?", (message_id,))
+        row = cursor.fetchone()
+        return self._row_to_dict(row) if row else None

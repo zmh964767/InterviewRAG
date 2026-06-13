@@ -1,6 +1,7 @@
 """Pydantic 数据模型"""
 
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, Field
 
 
@@ -189,3 +190,47 @@ class SweepResponse(BaseModel):
     rows: list[SweepRow] = Field(default_factory=list, description="所有 sweep 组合,按文件读取顺序")
     winner: SweepRow | None = Field(default=None, description="E_hr5 最高的组合")
     baseline_e_hr5: float = Field(default=0.0, description="最新评估汇总里的基准 E_hr5(从 latest_summary.json 动态读,文件/字段缺失时为 0.0)")
+
+
+# =========================================================================
+# 用户反馈
+# =========================================================================
+
+class SubmitFeedbackRequest(BaseModel):
+    """用户提交反馈(公开端)"""
+    message_id: str = Field(min_length=1, max_length=64, description="前端 message.id")
+    conversation_id: str = Field(min_length=1, max_length=64, description="对话 ID")
+    rating: Literal[1, -1] = Field(description="1=👍, -1=👎")
+    comment: str | None = Field(default=None, max_length=1000, description="可选 comment")
+    message_content: str = Field(min_length=1, max_length=10000, description="消息内容快照")
+    message_role: Literal["user", "assistant"] = Field(description="user | assistant")
+
+
+class FeedbackItem(BaseModel):
+    """单条反馈(管理端列表项)"""
+    id: str
+    message_id: str
+    conversation_id: str
+    rating: int
+    comment: str | None
+    message_content: str
+    message_role: str
+    client_ip: str | None
+    user_agent: str | None
+    created_at: str
+
+
+class FeedbackListResponse(BaseModel):
+    """反馈列表响应"""
+    items: list[FeedbackItem] = Field(default_factory=list)
+    total: int
+    page: int
+    size: int
+
+
+class FeedbackStats(BaseModel):
+    """反馈统计"""
+    positive: int = Field(description="👍 数量")
+    negative: int = Field(description="👎 数量")
+    total: int = Field(description="总反馈数")
+    rate: float = Field(description="差评率: negative / total(0..1)")

@@ -16,6 +16,7 @@ from app.services.rag_service import RAGService
 from app.api import query, health, questions_public
 from app.api import auth
 from app.api import admin
+from app.api import feedback as feedback_router
 
 # 日志配置
 logging.basicConfig(
@@ -69,7 +70,9 @@ app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(query.router, prefix="/api", tags=["query"])
 app.include_router(questions_public.router, prefix="/api", tags=["questions"])
 app.include_router(health.router, prefix="/api", tags=["health"])
-app.include_router(admin.router)  # /api/admin/* — JWT 保护
+# 公开反馈(POST /feedback)— prefix="/api",router 内部路径 /feedback
+app.include_router(feedback_router.router, prefix="/api", tags=["feedback"])
+app.include_router(admin.router)  # /api/admin/* — JWT 保护(含 feedback 管理端)
 
 
 @app.exception_handler(AppError)
