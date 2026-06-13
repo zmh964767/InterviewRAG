@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { adminGetFeedback, adminGetFeedbackStats } from '@/lib/api'
+import { adminGetFeedback, adminGetFeedbackStats, adminExportFeedback } from '@/lib/api'
 import type { FeedbackItem, FeedbackStats } from '@/lib/types'
 import { EVAL } from '@/lib/copy'
 import { useChatContext } from '@/contexts/ChatContext'
@@ -86,7 +86,7 @@ export function FeedbackView() {
 
       {/* 统计徽章 */}
       {stats && (
-        <div className="flex gap-3 mb-5">
+        <div className="flex flex-wrap items-center gap-3 mb-5">
           <StatBadge label={EVAL.FEEDBACK_STATS_POSITIVE} value={stats.positive} color="var(--ink)" />
           <StatBadge label={EVAL.FEEDBACK_STATS_NEGATIVE} value={stats.negative} color="#991b1b" />
           <StatBadge
@@ -94,6 +94,18 @@ export function FeedbackView() {
             value={stats.total > 0 ? formatPct(stats.rate) : '—'}
             color="var(--ink-muted)"
           />
+          <button
+            onClick={() =>
+              void adminExportFeedback({
+                rating: ratingFilter === 'all' ? undefined : (Number(ratingFilter) as 1 | -1),
+                since: sinceForFilter(timeFilter),
+              })
+            }
+            className="text-xs px-3 py-1 rounded transition-colors hover:underline ml-auto"
+            style={{ color: 'var(--ink-muted)' }}
+          >
+            {EVAL.FEEDBACK_EXPORT_CSV}
+          </button>
         </div>
       )}
 

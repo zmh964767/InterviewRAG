@@ -275,3 +275,84 @@ class TestAdminFeedbackStats:
         assert res.status_code == 401
         res2 = client.get("/api/admin/feedback/stats")
         assert res2.status_code == 401
+
+
+class TestAdminExportFeedback:
+    """管理端 GET /api/admin/feedback/export"""
+
+    def test_admin_export_feedback_csv_format(self, client):
+        """导出 CSV 格式正确:UTF-8 BOM + Content-Disposition + 表头 + 中文不乱码"""
+        # 准备 1 条带中文的反馈
+        client.post(
+            "/api/feedback",
+            json={
+                "message_id": "export-test-1",
+                "conversation_id": "conv-1",
+                "rating": 1,
+                "comment": "test comment 中文",
+                "message_content": "test content 中文",
+                "message_role": "assistant",
+            },
+        )
+
+        res = client.get(
+            "/api/admin/feedback/export",
+            headers=_admin_headers(client),
+        )
+        assert res.status_code == 200
+        # Content-Type: text/csv; charset=utf-8
+        ct = res.headers["content-type"]
+        assert "text/csv" in ct
+        assert "charset=utf-8" in ct
+        # Content-Disposition: attachment; filename=feedback_YYYY-MM-DD.csv
+        cd = res.headers["content-disposition"]
+        assert "attachment" in cd
+        assert "feedback_" in cd
+        assert ".csv" in cd
+        # BOM 验证:前 3 字节是 0xef 0xbb 0xbf
+        body = res.content
+        assert body[:3] == b"\xef\xbb\xbf"
+        # 剥离 BOM 后解码,验证中文不乱码 + 表头含必要字段
+        body_str = body.decode("utf-8-sig")
+        assert "created_at" in body_str
+        assert "rating" in body_str
+        assert "message_id" in body_str
+        assert "test content 中文" in body_str
+        assert "test comment 中文" in body_str
+
+    def test_admin_export_feedback_filter_by_rating(self, client):
+        """导出沿用 rating 筛选透传:rating=-1 只含 👎"""
+        client.post("/api/feedback", json={
+            "message_id": "filter-pos",
+            "conversation_id": "c1",
+            "rating": 1,
+            "comment": "good",
+            "message_content": "good content",
+            "message_role": "assistant",
+        })
+        client.post("/api/feedback", json={
+            "message_id": "filter-neg",
+            "conversation_id": "c1",
+            "rating": -1,
+            "comment": "bad",
+            "message_content": "bad content",
+            "message_role": "assistant",
+        })
+
+        res = client.get(
+            "/api/admin/feedback/export",
+            params={"rating": -1},
+            headers=_admin_headers(client),
+        )
+        assert res.status_code == 200
+        body_str = res.content.decode("utf-8-sig")
+        # 验证只含 👎 不含 👍(按 message_id 区分)
+        assert "filter-neg" in body_str
+        assert "filter-pos" not in body_str
+        assert "bad content" in body_str
+        assert "good content" not in body_str
+
+    def test_admin_export_feedback_requires_auth(self, client):
+        """导出端点需要 admin auth"""
+        res = client.get("/api/admin/feedback/export")
+        assert res.status_code == 401

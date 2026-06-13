@@ -449,3 +449,29 @@ export async function adminGetFeedbackStats(since?: string): Promise<FeedbackSta
   }
   return res.json()
 }
+
+/** 管理端: 导出 CSV(浏览器侧自动触发下载) */
+export async function adminExportFeedback(
+  params: { rating?: 1 | -1; since?: string } = {},
+): Promise<void> {
+  const search = new URLSearchParams()
+  if (params.rating !== undefined) search.set('rating', String(params.rating))
+  if (params.since) search.set('since', params.since)
+  const qs = search.toString()
+  const url = `${API_BASE}/api/admin/feedback/export${qs ? `?${qs}` : ''}`
+  const res = await fetch(url, { headers: adminHeaders() })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '导出失败' }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  // 触发浏览器下载
+  const blob = await res.blob()
+  const blobUrl = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = blobUrl
+  a.download = `feedback_${new Date().toISOString().slice(0, 10)}.csv`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(blobUrl)
+}
