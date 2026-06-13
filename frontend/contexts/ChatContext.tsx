@@ -104,7 +104,7 @@ function convReducer(state: Conversation[], action: ConvAction): Conversation[] 
           next[idx] = { ...next[idx], content, sources }
           return { ...c, messages: next, updatedAt: Date.now() }
         }
-        const newMsg: Message = { id: aiMsgId, role: 'assistant', content, sources, timestamp: Date.now() }
+        const newMsg: Message = { id: aiMsgId, role: 'assistant', content, sources, timestamp: Date.now(), conversationId: convId }
         return { ...c, messages: [...c.messages, newMsg], updatedAt: Date.now() }
       })
     }

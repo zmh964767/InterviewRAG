@@ -7,13 +7,14 @@ import { EvalItemRow } from '@/components/eval/EvalItemRow'
 import { RunEvalButton } from '@/components/eval/RunEvalButton'
 import { EvalCompareView } from '@/components/eval/EvalCompareView'
 import { SweepView } from '@/components/eval/SweepView'
+import { FeedbackView } from '@/components/eval/FeedbackView'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { adminGetEvalSummary, adminGetEvalDetail } from '@/lib/api'
 import { EVAL } from '@/lib/copy'
 import type { EvalSummaryResponse, EvalDetailResponse } from '@/lib/types'
 
-type Tab = 'overview' | 'items' | 'history' | 'compare' | 'sweep'
+type Tab = 'overview' | 'items' | 'history' | 'compare' | 'sweep' | 'feedback'
 
 /** 管理页 tab 注册表:用 `as const` 保证字面量类型,IDE 可补全 */
 const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
@@ -22,6 +23,7 @@ const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
   { key: 'history', label: EVAL.HISTORY_TITLE },
   { key: 'compare', label: '对比' },
   { key: 'sweep', label: 'Sweep' },
+  { key: 'feedback', label: EVAL.FEEDBACK_TAB },
 ] as const
 
 export default function AdminEvalPage() {
@@ -252,6 +254,12 @@ export default function AdminEvalPage() {
         {tab === 'sweep' && (
           <div>
             <SweepView />
+          </div>
+        )}
+
+        {tab === 'feedback' && (
+          <div>
+            <FeedbackView />
           </div>
         )}
       </div>

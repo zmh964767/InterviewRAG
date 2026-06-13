@@ -18,6 +18,9 @@ import type {
   EvalDetailResponse,
   CompareResponse,
   SweepResponse,
+  SubmitFeedbackBody,
+  FeedbackListResponse,
+  FeedbackStats,
 } from './types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'
@@ -392,6 +395,57 @@ export async function adminChangePassword(
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '修改失败' }))
     throw new Error(error.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+// =========================================================================
+// 用户反馈
+// =========================================================================
+
+/** 公开端: 提交反馈 */
+export async function submitFeedback(
+  body: SubmitFeedbackBody,
+): Promise<{ id: string; message_id: string }> {
+  const res = await fetch(`${API_BASE}/api/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '提交失败' }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** 管理端: 反馈列表(分页 + 筛选) */
+export async function adminGetFeedback(
+  params: { rating?: 1 | -1; since?: string; page?: number; size?: number } = {},
+): Promise<FeedbackListResponse> {
+  const search = new URLSearchParams()
+  if (params.rating !== undefined) search.set('rating', String(params.rating))
+  if (params.since) search.set('since', params.since)
+  if (params.page) search.set('page', String(params.page))
+  if (params.size) search.set('size', String(params.size))
+  const url = `${API_BASE}/api/admin/feedback${search.toString() ? `?${search.toString()}` : ''}`
+  const res = await fetch(url, { headers: adminHeaders() })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '查询失败' }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** 管理端: 反馈统计 */
+export async function adminGetFeedbackStats(since?: string): Promise<FeedbackStats> {
+  const url = since
+    ? `${API_BASE}/api/admin/feedback/stats?since=${encodeURIComponent(since)}`
+    : `${API_BASE}/api/admin/feedback/stats`
+  const res = await fetch(url, { headers: adminHeaders() })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: '统计查询失败' }))
+    throw new Error(err.detail || `HTTP ${res.status}`)
   }
   return res.json()
 }

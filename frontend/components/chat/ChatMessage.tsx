@@ -9,6 +9,8 @@ import 'highlight.js/styles/github-dark.css'
 import type { Message } from '@/lib/types'
 import { SourceCard } from '@/components/sources/SourceCard'
 import { InlineErrorBanner } from './InlineErrorBanner'
+import { submitFeedback } from '@/lib/api'
+import { EVAL } from '@/lib/copy'
 
 interface ChatMessageProps {
   message: Message
@@ -136,7 +138,7 @@ export function ChatMessage({
 
         {/* Actions (assistant messages only) */}
         {!isUser && message.content && !isStreaming && !error && (
-          <div className="flex items-center gap-1 mt-2">
+          <div className="flex flex-wrap items-center gap-1 mt-2">
             <button
               onClick={handleCopy}
               className="flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-all"
@@ -169,6 +171,12 @@ export function ChatMessage({
                 重新生成
               </button>
             )}
+            <FeedbackBar
+              messageId={message.id}
+              conversationId={message.conversationId ?? 'unknown'}
+              messageContent={message.content}
+              messageRole={message.role}
+            />
           </div>
         )}
 
@@ -201,6 +209,144 @@ export function ChatMessage({
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// =========================================================================
+// FeedbackBar: 👍 / 👎 反馈(只对 assistant 消息显示)
+// 放在同文件而不是独立 components/chat/FeedbackBar.tsx,理由:
+// FeedbackBar 强耦合 ChatMessage 的 messageId / content / role 上下文,
+// 拆出去需要 prop drilling,得不偿失。
+// =========================================================================
+
+interface FeedbackBarProps {
+  messageId: string
+  conversationId: string
+  messageContent: string
+  messageRole: 'user' | 'assistant'
+}
+
+function FeedbackBar({ messageId, conversationId, messageContent, messageRole }: FeedbackBarProps) {
+  const [submitted, setSubmitted] = useState<'positive' | 'negative' | null>(null)
+  const [showComment, setShowComment] = useState(false)
+  const [comment, setComment] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const submit = useCallback(
+    async (rating: 1 | -1, commentText: string | null) => {
+      setSubmitting(true)
+      setErr(null)
+      try {
+        await submitFeedback({
+          message_id: messageId,
+          conversation_id: conversationId,
+          rating,
+          comment: commentText,
+          message_content: messageContent,
+          message_role: messageRole,
+        })
+        setSubmitted(rating === 1 ? 'positive' : 'negative')
+        setShowComment(false)
+        setComment('')
+      } catch (e) {
+        setErr((e as Error).message || EVAL.FEEDBACK_SUBMIT_FAILED)
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [messageId, conversationId, messageContent, messageRole],
+  )
+
+  const handleThumbUp = useCallback(() => {
+    if (submitted || submitting) return
+    void submit(1, null)
+  }, [submit, submitted, submitting])
+
+  const handleThumbDown = useCallback(() => {
+    if (submitted || submitting) return
+    setShowComment(true)
+  }, [submitted, submitting])
+
+  const handleCommentSubmit = useCallback(() => {
+    if (submitting) return
+    void submit(-1, comment.trim() || null)
+  }, [submit, comment, submitting])
+
+  const handleCancel = useCallback(() => {
+    setShowComment(false)
+    setComment('')
+    setErr(null)
+  }, [])
+
+  if (submitted) {
+    return (
+      <span className="text-[11px] px-2 py-1 rounded" style={{ color: 'var(--ink-muted)' }}>
+        {EVAL.FEEDBACK_SUBMITTED} {submitted === 'positive' ? '👍' : '👎'}
+      </span>
+    )
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <button
+        onClick={handleThumbUp}
+        disabled={submitting}
+        aria-label="点赞"
+        className="flex items-center px-1.5 py-1 rounded text-[11px] transition-all"
+        style={{ color: 'var(--ink-muted)' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-muted)' }}
+      >
+        👍
+      </button>
+      <button
+        onClick={handleThumbDown}
+        disabled={submitting}
+        aria-label="点踩"
+        className="flex items-center px-1.5 py-1 rounded text-[11px] transition-all"
+        style={{ color: 'var(--ink-muted)' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--ink)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--ink-muted)' }}
+      >
+        👎
+      </button>
+      {showComment && (
+        <div className="flex flex-wrap items-center gap-1.5 ml-1">
+          <input
+            type="text"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder={EVAL.FEEDBACK_COMMENT_PLACEHOLDER}
+            disabled={submitting}
+            className="px-2 py-1 rounded text-[11px]"
+            style={{
+              background: 'var(--paper)',
+              border: '1px solid var(--border)',
+              color: 'var(--ink)',
+              minWidth: '180px',
+            }}
+          />
+          <button
+            onClick={handleCommentSubmit}
+            disabled={submitting}
+            className="px-2 py-1 rounded text-[11px]"
+            style={{ background: 'var(--ink)', color: 'var(--cream)' }}
+          >
+            {EVAL.FEEDBACK_SUBMIT}
+          </button>
+          <button
+            onClick={handleCancel}
+            disabled={submitting}
+            className="px-2 py-1 rounded text-[11px]"
+            style={{ color: 'var(--ink-muted)' }}
+          >
+            {EVAL.FEEDBACK_CANCEL}
+          </button>
+        </div>
+      )}
+      {err && <span className="text-[11px] ml-1" style={{ color: '#991b1b' }}>{err}</span>}
     </div>
   )
 }

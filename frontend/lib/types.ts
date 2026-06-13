@@ -55,6 +55,8 @@ export interface Message {
   content: string
   sources?: SourceRef[]
   timestamp: number
+  /** 所属对话 ID(feedback 提交需要) */
+  conversationId?: string
 }
 
 /** SSE 流式事件 */
@@ -252,4 +254,48 @@ export interface SweepResponse {
   winner: SweepRow | null
   /** 从 latest_summary.json 动态读取的基准,文件/字段缺失时为 0.0 */
   baseline_e_hr5: number
+}
+
+// =========================================================================
+// 用户反馈
+// =========================================================================
+
+/** 公开端 POST /api/feedback 请求体 */
+export interface SubmitFeedbackBody {
+  message_id: string
+  conversation_id: string
+  rating: 1 | -1
+  comment?: string | null
+  message_content: string
+  message_role: 'user' | 'assistant'
+}
+
+/** 管理端单条反馈 */
+export interface FeedbackItem {
+  id: string
+  message_id: string
+  conversation_id: string
+  rating: 1 | -1
+  comment: string | null
+  message_content: string
+  message_role: 'user' | 'assistant'
+  client_ip: string | null
+  user_agent: string | null
+  created_at: string
+}
+
+/** GET /api/admin/feedback 响应 */
+export interface FeedbackListResponse {
+  items: FeedbackItem[]
+  total: number
+  page: number
+  size: number
+}
+
+/** GET /api/admin/feedback/stats 响应 */
+export interface FeedbackStats {
+  positive: number
+  negative: number
+  total: number
+  rate: number
 }

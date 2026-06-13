@@ -51,6 +51,7 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
       role: 'user',
       content,
       timestamp: Date.now(),
+      conversationId,
     }
 
     const aiMessageId = (Date.now() + 1).toString()
@@ -60,6 +61,7 @@ export function useChat({ onMessageUpdate, getMessages }: UseChatOptions) {
       content: '',
       sources: [],
       timestamp: Date.now(),
+      conversationId,
     }
 
     onMessageUpdate(conversationId, [...currentMessages, userMessage, aiMessage])
