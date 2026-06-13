@@ -1,11 +1,19 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { Suspense, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
 
 export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginPageInner />
+    </Suspense>
+  )
+}
+
+function AdminLoginPageInner() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -89,3 +97,7 @@ export default function AdminLoginPage() {
     </div>
   )
 }
+
+// Note: AdminLoginPageInner is a local component wrapped in Suspense to satisfy Next.js 14's
+// requirement that useSearchParams() be inside a <Suspense> boundary (SSG prerender error)
+

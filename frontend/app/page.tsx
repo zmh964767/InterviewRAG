@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { Suspense, useState, useCallback, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Modal } from '@/components/a11y/Modal'
 import { ChatHistory } from '@/components/chat/ChatHistory'
@@ -12,6 +12,14 @@ import { useChatContext } from '@/contexts/ChatContext'
 import { A11Y } from '@/lib/copy'
 
 export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeInner />
+    </Suspense>
+  )
+}
+
+function HomeInner() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const searchParams = useSearchParams()
@@ -179,3 +187,7 @@ export default function Home() {
     </div>
   )
 }
+
+// Note: HomeInner is a local component wrapped in Suspense to satisfy Next.js 14's
+// requirement that useSearchParams() be inside a <Suspense> boundary (SSG prerender error)
+

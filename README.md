@@ -69,6 +69,33 @@ InterviewRAG/
 └── README.md
 ```
 
+## 🐳 Docker 启动（推荐）
+
+无需安装 Python / Node / ChromaDB,Docker 一键拉起前后端。
+
+```bash
+cp backend/.env.example backend/.env
+# 编辑 backend/.env,填入 ZHIPU_API_KEY(必填)
+docker compose up -d
+```
+
+访问：
+- 用户端：http://localhost:3000
+- API 文档：http://localhost:8080/docs
+- 管理后台：http://localhost:3000/admin/login(默认密码 `admin123`)
+
+数据持久化在 Docker volume `interviewrag_data` 中，`docker compose down` 不会丢数据;`docker compose down -v` 才彻底清空（含数据库和向量索引）。
+
+常用命令：
+```bash
+docker compose logs -f backend    # 查看后端日志
+docker compose logs -f frontend   # 查看前端日志
+docker compose down               # 停止(保留数据)
+docker compose build --no-cache  # 重新构建镜像
+```
+
+> **注意**：默认 `SKIP_RERANKER=1` 跳过 BGE Re-ranker(Windows/Linux 容器内都建议跳过,需在 backend 目录单独启用)。需要 Re-ranker 时去掉 `docker-compose.yml` 里那一行,镜像会变大(~1GB)。
+
 ## 🚀 快速开始
 
 ### 1. 后端
@@ -141,6 +168,11 @@ cd frontend
 npm test          # 23 个 ChatContext 单测（CRUD + 持久化 + 流式 partial 同步 + abort + 重新生成）
 npm run lint      # ESLint 检查（0 warnings / errors）
 npx tsc --noEmit  # TypeScript 类型检查（0 errors）
+```
+
+```bash
+cd backend
+pytest tests/ -v  # 21 个测试文件，214 个测试（含 API/数据库/评估/反馈/embed/llm/rag）
 ```
 
 ## 📊 检索策略对比
@@ -219,9 +251,9 @@ python -m evaluation.sweep
 
 | 方向 | 说明 | 预估工作量 |
 |---|---|---|
-| **Docker 部署** | Dockerfile + docker-compose（前端 + 后端 + ChromaDB），一键启动 | 1 天 |
+| ~~**Docker 部署**~~ | ~~Dockerfile + docker-compose(前端 + 后端 + ChromaDB),一键启动~~ ✅ | ~~1 天~~ |
 | ~~**流式性能优化**~~ | ~~`mergePartialIntoConversation` 每 token 全数组重建 → 改用 `useReducer`；react-markdown 逐 token 重解析 → 50ms 节流~~ ✅ | ~~1-2 天~~ |
-| **后端单测补全** | `services/` + `api/` 单测覆盖率补齐（当前只有前端 23 个单测） | 1 天 |
+| ~~**后端单测补全**~~ | ~~`services/` + `api/` 单测覆盖率补齐（当前 21 个测试文件，含 embed/llm/rag 3 个核心服务，214 个测试）~~ ✅ | ~~1 天~~ |
 | ~~**知识库批量操作**~~ | ~~多选 + 批量删除 + 批量导入~~ ✅ | ~~1 天~~ |
 
 ### 中优先级
@@ -243,6 +275,7 @@ python -m evaluation.sweep
 | **反馈数据 → Sweep 关联** | 把差评率低的 prompt variant 自动标记,辅助 sweep 调优 | 1 天 |
 | **多模型支持** | 接入 OpenAI / Claude 等其他 LLM | 1 天 |
 | **Redis 会话存储** | 后端 conversations 从内存 dict 迁移到 Redis | 半天 |
+| **后端 Docker 镜像瘦身** | 多阶段构建 + `sentence-transformers` 改可选依赖，目标 < 2.5GB（当前 3.22GB） | 半天 |
 
 ## License
 
