@@ -112,6 +112,8 @@ export const EVAL = {
   FEEDBACK_SUBMIT: '提交',
   FEEDBACK_CANCEL: '取消',
   FEEDBACK_SUBMIT_FAILED: '提交失败',
+  FEEDBACK_VIEW_CONVERSATION: '查看对话',
+  FEEDBACK_EXPORT_CSV: '导出 CSV',
 } as const
 
 /** 知识库管理高频文案 */

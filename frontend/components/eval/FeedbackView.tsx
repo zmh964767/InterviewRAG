@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { adminGetFeedback, adminGetFeedbackStats } from '@/lib/api'
 import type { FeedbackItem, FeedbackStats } from '@/lib/types'
 import { EVAL } from '@/lib/copy'
+import { useChatContext } from '@/contexts/ChatContext'
 
 type RatingFilter = 'all' | '1' | '-1'
 type TimeFilter = 'all' | 'today' | 'week'
@@ -193,6 +194,7 @@ function StatBadge({ label, value, color }: { label: string; value: number | str
 }
 
 function FeedbackRow({ item }: { item: FeedbackItem }) {
+  const { conversations } = useChatContext()
   const isPositive = item.rating === 1
   return (
     <div className="px-4 py-3 text-sm" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
@@ -208,8 +210,20 @@ function FeedbackRow({ item }: { item: FeedbackItem }) {
         </span>
         <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>{formatTs(item.created_at)}</span>
         <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>msg {truncate(item.message_id, 16)}</span>
+        {(() => {
+          const conv = conversations.find(c => c.id === item.conversation_id)
+          return conv ? (
+            <button
+              onClick={() => window.open(`/?conv=${item.conversation_id}`, '_blank')}
+              className="text-xs ml-auto px-2 py-0.5 rounded transition-colors hover:underline"
+              style={{ color: 'var(--ink-muted)' }}
+            >
+              {EVAL.FEEDBACK_VIEW_CONVERSATION}
+            </button>
+          ) : null
+        })()}
         {item.client_ip && (
-          <span className="text-xs ml-auto" style={{ color: 'var(--ink-muted)' }}>IP {item.client_ip}</span>
+          <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>IP {item.client_ip}</span>
         )}
       </div>
       <div className="text-sm mb-1" style={{ color: 'var(--ink)' }}>{truncate(item.message_content, 100)}</div>

@@ -1,6 +1,7 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Modal } from '@/components/a11y/Modal'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
@@ -13,6 +14,7 @@ import { A11Y } from '@/lib/copy'
 export default function Home() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
+  const searchParams = useSearchParams()
 
   // 统一从 ChatContext 消费（conversations + 流式 + CRUD）
   const {
@@ -62,6 +64,14 @@ export default function Home() {
     },
     [switchConversation],
   )
+
+  // 从 ?conv=<id> 启动时自动切换对话
+  useEffect(() => {
+    const convId = searchParams.get('conv')
+    if (convId) {
+      switchConversation(convId)
+    }
+  }, [searchParams, switchConversation])
 
   // 重新生成：找到最后一条 user 消息重发
   const handleRegenerate = useCallback(() => {
