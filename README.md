@@ -13,7 +13,8 @@
 - **暗色模式**：全站 light/dark 切换，跟随系统偏好，localStorage 持久化，inline script 防闪烁
 - **代码语法高亮**：highlight.js + github-dark 主题，Python/JS/JSON 等 190+ 种语言
 - **RAGAS 评估**：Faithfulness、Relevancy、Precision、Recall 四项指标
-- **评估报告 Web UI**：`/admin/eval` 页面展示最新指标 + 历史快照 + 对比 + Sweep
+- **评估报告 Web UI**：`/admin/eval` 5 个 tab：概览 / 题目详情 / 历史快照 / 对比 / Sweep
+- **用户反馈系统**：公开端 👍/👎 按钮 + 可选 comment；管理端「反馈」tab 展示统计/列表/导出 CSV/跳回原对话
 - **对比实验**：四种检索策略效果对比
 - **骨架屏加载**：列表/报告加载时显示 shimmer 占位
 - **无障碍**：focus-visible ring + Modal 焦点陷阱 + skip link + prefers-reduced-motion
@@ -232,13 +233,14 @@ python -m evaluation.sweep
 | **管理端移动端适配** | admin 侧边栏 256px 固定宽度 → 响应式折叠 | 半天 |
 | ~~**评估历史对比**~~ | ~~两次评估快照的指标 diff 展示~~ ✅ | ~~1 天~~ |
 | ~~**Sweep 参数扫描 UI**~~ | ~~`evaluation/sweep.py` 结果展示 + winner 推荐~~ ✅ | ~~1 天~~ |
+| ~~**用户反馈系统**~~ | ~~对回答点赞/点踩 + 反馈收集 + 管理端统计/列表/导出 CSV + 跳回原对话~~ ✅ | ~~1 天~~ |
 
 ### 低优先级
 
 | 方向 | 说明 | 预估工作量 |
 |---|---|---|
 | **知识库版本管理** | 导入/删除操作的版本快照 + 回滚 | 2 天 |
-| **用户反馈系统** | 对回答点赞/点踩 + 反馈收集 | 1 天 |
+| **反馈数据 → Sweep 关联** | 把差评率低的 prompt variant 自动标记,辅助 sweep 调优 | 1 天 |
 | **多模型支持** | 接入 OpenAI / Claude 等其他 LLM | 1 天 |
 | **Redis 会话存储** | 后端 conversations 从内存 dict 迁移到 Redis | 半天 |
 
