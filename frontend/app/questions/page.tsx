@@ -77,7 +77,7 @@ export default function QuestionsPage() {
       <div className="flex-1 flex flex-col min-w-0">
         <header
           className="h-14 px-6 flex items-center gap-4 shrink-0 border-b"
-          style={{ borderColor: 'var(--border)', background: 'rgba(250, 248, 245, 0.8)' }}
+          style={{ borderColor: 'var(--border)', background: 'var(--cream)' }}
         >
           <h1 className="text-lg font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>
             {QUESTIONS.TITLE}

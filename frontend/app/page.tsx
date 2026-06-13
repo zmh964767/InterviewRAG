@@ -104,7 +104,7 @@ export default function Home() {
       >
         <header
           className="h-14 px-6 flex items-center shrink-0 border-b"
-          style={{ borderColor: 'var(--border)', background: 'rgba(250, 248, 245, 0.8)', backdropFilter: 'blur(12px)' }}
+          style={{ borderColor: 'var(--border)', background: 'var(--cream)', backdropFilter: 'blur(12px)' }}
         >
           <div className="flex items-center gap-4">
             <button
