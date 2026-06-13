@@ -171,14 +171,12 @@ export function ChatMessage({
                 重新生成
               </button>
             )}
-            {message.conversationId ? (
-              <FeedbackBar
-                messageId={message.id}
-                conversationId={message.conversationId}
-                messageContent={message.content}
-                messageRole={message.role}
-              />
-            ) : null}
+            <FeedbackBar
+              messageId={message.id}
+              conversationId={message.conversationId ?? 'unknown'}
+              messageContent={message.content}
+              messageRole={message.role}
+            />
           </div>
         )}
 
