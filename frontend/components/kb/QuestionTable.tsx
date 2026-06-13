@@ -75,7 +75,7 @@ export function QuestionTable({ items, selectedIds = new Set(), onToggleSelect =
               onClick={() => onSelect?.(q)}
               className="cursor-pointer transition-colors"
               style={{ borderBottom: '1px solid var(--border-subtle)' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--cream)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--nav-active-bg)' }}
               onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
             >
               <td className="px-4 py-3 text-center">
@@ -99,7 +99,7 @@ export function QuestionTable({ items, selectedIds = new Set(), onToggleSelect =
                 <span
                   className="text-xs px-2 py-0.5 rounded-full"
                   style={{
-                    background: 'var(--cream)',
+                    background: 'var(--nav-active-bg)',
                     color: DIFFICULTY_COLORS[q.difficulty] ?? 'var(--ink-muted)',
                     border: '1px solid var(--border-subtle)',
                   }}
