@@ -291,6 +291,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               role: 'user',
               content,
               timestamp: Date.now(),
+              conversationId,
             }
             dispatch({ type: 'UPDATE_MESSAGES', payload: { convId: conversationId, messages: [...conv.messages, userMsg] } })
           }
@@ -302,6 +303,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           role: 'user',
           content,
           timestamp: Date.now(),
+          conversationId,
         }
         const aiMsg: Message = {
           id: aiMsgId,
@@ -309,6 +311,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           content: '',
           sources: [],
           timestamp: Date.now(),
+          conversationId,
         }
         const existingConv = conversationsRef.current.find(c => c.id === conversationId)
         if (!existingConv) {
