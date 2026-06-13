@@ -35,3 +35,9 @@ async def health_endpoint(rag: RAGService = Depends(get_rag_service)):
         vector_count=vector_count,
         llm_status=llm_status,
     )
+
+
+@router.get("/ping")
+async def ping():
+    """轻量存活检查（不调 LLM，给 docker healthcheck 用）"""
+    return {"status": "ok"}

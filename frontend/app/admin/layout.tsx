@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { AdminAuthProvider, useAdminAuth } from '@/contexts/AdminAuthContext'
 import Link from 'next/link'
@@ -12,6 +12,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [showChangePwd, setShowChangePwd] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
+  const hamburgerRef = useRef<HTMLButtonElement | null>(null)
 
   const isLoginPage = pathname === '/admin/login'
 
@@ -20,6 +23,66 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
       router.replace(`/admin/login?redirect=${encodeURIComponent(pathname)}`)
     }
   }, [isLoading, isLoggedIn, isLoginPage, pathname, router])
+
+  // 跟踪是否在移动端（<lg / 1024px），用于决定 inert 行为
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    setIsMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // 路由切换时自动关闭移动端抽屉
+  useEffect(() => {
+    setMobileSidebarOpen(false)
+  }, [pathname])
+
+  // ESC 关闭移动端抽屉（排除 IME 组合）
+  useEffect(() => {
+    if (!mobileSidebarOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (e.isComposing) return
+      setMobileSidebarOpen(false)
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [mobileSidebarOpen])
+
+  // 打开抽屉时锁定 body 滚动，关闭时还原
+  useEffect(() => {
+    if (!mobileSidebarOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [mobileSidebarOpen])
+
+  // 打开时聚焦抽屉内首元素，关闭时还原到汉堡按钮
+  useEffect(() => {
+    if (mobileSidebarOpen) {
+      const raf = requestAnimationFrame(() => {
+        const aside = document.getElementById('admin-sidebar')
+        if (!aside) return
+        const first = aside.querySelector<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        )
+        if (first) {
+          first.focus()
+        } else {
+          aside.focus()
+        }
+      })
+      return () => cancelAnimationFrame(raf)
+    }
+    // 关闭时：仅在移动端把焦点还给汉堡按钮（桌面端不操作，避免误 focus 隐藏元素）
+    if (isMobile) {
+      hamburgerRef.current?.focus()
+    }
+    return undefined
+  }, [mobileSidebarOpen, isMobile])
 
   if (isLoading) {
     return (
@@ -44,8 +107,44 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen" style={{ background: 'var(--cream)' }}>
       <a href="#main-content" className="skip-link">{A11Y.SKIP_TO_MAIN}</a>
-      {/* Admin Sidebar */}
-      <aside className="w-64 shrink-0 flex flex-col border-r" style={{ background: 'var(--paper)', borderColor: 'var(--border)' }}>
+
+      {/* 移动端汉堡按钮 — 仅 <lg 显示 */}
+      <button
+        ref={hamburgerRef}
+        onClick={() => setMobileSidebarOpen(true)}
+        className="lg:hidden fixed top-3 left-3 z-30 p-2 rounded-lg transition-colors"
+        style={{ background: 'var(--paper)', border: '1px solid var(--border)', color: 'var(--ink-muted)' }}
+        aria-label={A11Y.MENU}
+      >
+        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+        </svg>
+      </button>
+
+      {/* 移动端遮罩 — 打开时显示，点击关闭 */}
+      {mobileSidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 transition-opacity"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Admin Sidebar — 移动端滑入抽屉，桌面端常驻布局流 */}
+      <aside
+        id="admin-sidebar"
+        tabIndex={-1}
+        className={`
+          fixed lg:static inset-y-0 left-0 z-50
+          w-64 shrink-0 flex flex-col border-r
+          transform transition-transform duration-300 ease-in-out
+          ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+        style={{ background: 'var(--paper)', borderColor: 'var(--border)' }}
+        aria-label="管理后台导航"
+        // 仅移动端关闭时 inert：桌面端侧边栏常驻可见可交互（避免 Tab 跳过）
+        inert={isMobile && !mobileSidebarOpen ? true : undefined}
+      >
         <div className="h-14 px-5 flex items-center border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent)' }}>
@@ -55,6 +154,17 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
               <div className="text-sm font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>管理后台</div>
             </div>
           </div>
+          {/* 抽屉内关闭按钮 — 仅移动端显示 */}
+          <button
+            onClick={() => setMobileSidebarOpen(false)}
+            className="ml-auto p-1.5 rounded-lg transition-colors lg:hidden"
+            style={{ color: 'var(--ink-muted)' }}
+            aria-label="关闭菜单"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1">

@@ -18,10 +18,12 @@ services:
     volumes:
       - interviewrag_data:/app/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      # /api/ping 不调 LLM（避免智谱 API 重试 3 次把 healthcheck 卡到 30s+）
+      test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8080/api/ping"]
       interval: 10s
       timeout: 5s
       retries: 3
+      start_period: 20s
 
   frontend:
     build: ./frontend
