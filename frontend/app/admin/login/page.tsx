@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { useAdminAuth } from '@/contexts/AdminAuthContext'
 
 export default function AdminLoginPage() {
@@ -37,6 +38,7 @@ export default function AdminLoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--cream)' }}>
+      <div className="fixed top-4 right-4 z-50"><ThemeToggle /></div>
       <div
         className="w-full max-w-sm p-8 rounded-2xl"
         style={{ background: 'var(--paper)', border: '1px solid var(--border)', boxShadow: 'var(--shadow-lg)' }}

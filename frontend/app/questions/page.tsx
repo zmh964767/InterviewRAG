@@ -6,6 +6,7 @@ import { QuestionCard } from '@/components/kb/QuestionCard'
 import { QuestionDetail } from '@/components/kb/QuestionDetail'
 import { QuestionTable } from '@/components/kb/QuestionTable'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { useChatContext } from '@/contexts/ChatContext'
 import { listQuestions } from '@/lib/api'
@@ -82,6 +83,8 @@ export default function QuestionsPage() {
             {QUESTIONS.TITLE}
           </h1>
           <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>{QUESTIONS.TOTAL(total)}</span>
+          <div className="flex-1" />
+          <ThemeToggle />
         </header>
 
         {/* 过滤栏 */}

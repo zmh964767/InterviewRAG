@@ -5,6 +5,7 @@ import { Modal } from '@/components/a11y/Modal'
 import { ChatHistory } from '@/components/chat/ChatHistory'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { Sidebar } from '@/components/layout/Sidebar'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { useChatContext } from '@/contexts/ChatContext'
 import { A11Y } from '@/lib/copy'
@@ -123,6 +124,8 @@ export default function Home() {
               InterviewRAG
             </h1>
           </div>
+          <div className="flex-1" />
+          <ThemeToggle />
         </header>
 
         <ErrorBoundary>

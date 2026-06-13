@@ -7,6 +7,7 @@ import { EvalItemRow } from '@/components/eval/EvalItemRow'
 import { RunEvalButton } from '@/components/eval/RunEvalButton'
 import { EvalCompareView } from '@/components/eval/EvalCompareView'
 import { SweepView } from '@/components/eval/SweepView'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { adminGetEvalSummary, adminGetEvalDetail } from '@/lib/api'
 import { EVAL } from '@/lib/copy'
@@ -85,6 +86,7 @@ export default function AdminEvalPage() {
         </h1>
         {latest && <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>{EVAL.LAST_RUN(formatTs(latest.timestamp))}</span>}
         <div className="flex-1" />
+        <ThemeToggle />
         <RunEvalButton onComplete={() => void load()} />
       </header>
 

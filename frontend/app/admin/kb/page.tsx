@@ -10,6 +10,7 @@ import { QuestionTable } from '@/components/kb/QuestionTable'
 import { UndoToast } from '@/components/kb/UndoToast'
 import { BatchToolbar } from '@/components/kb/BatchToolbar'
 import { BatchDeleteDialog } from '@/components/kb/BatchDeleteDialog'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { ErrorBanner } from '@/components/ui/ErrorBanner'
 import { Skeleton } from '@/components/ui/Skeleton'
 import { adminBatchDelete, adminDeleteQuestion, adminInsertOne, adminListQuestions } from '@/lib/api'
@@ -194,6 +195,7 @@ export default function AdminKbPage() {
         </h1>
         <span className="text-xs" style={{ color: 'var(--ink-muted)' }}>{KB.TOTAL(total)}</span>
         <div className="flex-1" />
+        <ThemeToggle />
         <button
           onClick={() => setIngestOpen(true)}
           className="px-3 py-1.5 text-sm rounded-lg flex items-center gap-1.5"
