@@ -24,7 +24,10 @@ class ZhipuEmbeddingFunction(EmbeddingFunction):
     def __init__(self):
         from zhipuai import ZhipuAI
         settings = get_settings()
-        self.client = ZhipuAI(api_key=settings.zhipu_api_key)
+        self.client = ZhipuAI(
+            api_key=settings.zhipu_api_key,
+            timeout=settings.llm_timeout_s,
+        )
         self.model = settings.embedding_model
 
     def __call__(self, input: Documents) -> Embeddings:

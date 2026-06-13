@@ -18,7 +18,10 @@ class EmbedService:
         if not settings.zhipu_api_key:
             raise ExternalServiceError("智谱API", "未配置 ZHIPU_API_KEY")
 
-        self.client = ZhipuAI(api_key=settings.zhipu_api_key)
+        self.client = ZhipuAI(
+            api_key=settings.zhipu_api_key,
+            timeout=settings.llm_timeout_s,
+        )
         self.model = settings.embedding_model
         logger.info(f"智谱 Embedding 已初始化，模型: {self.model}")
 

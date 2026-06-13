@@ -19,7 +19,10 @@ class LLMService:
         if not settings.zhipu_api_key:
             raise ExternalServiceError("智谱API", "未配置 ZHIPU_API_KEY")
 
-        self.client = ZhipuAI(api_key=settings.zhipu_api_key)
+        self.client = ZhipuAI(
+            api_key=settings.zhipu_api_key,
+            timeout=settings.llm_timeout_s,
+        )
         self.model = settings.llm_model
         self.temperature = settings.llm_temperature
         self.max_tokens = settings.llm_max_tokens

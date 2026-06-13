@@ -44,6 +44,8 @@ def create_zhipu_client(async_client: bool = True):
     return client_cls(
         api_key=settings.zhipu_api_key,
         base_url="https://open.bigmodel.cn/api/paas/v4/",
+        timeout=settings.llm_timeout_s,
+        max_retries=0,  # 由 ragas/tenacity 层控制重试
     )
 
 

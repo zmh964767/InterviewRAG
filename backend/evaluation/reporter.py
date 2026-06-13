@@ -38,7 +38,7 @@ def generate_terminal_summary(
     if errors:
         error_rate = len(errors) / total if total else 0
         if error_rate > 0.2:
-            lines.append(f"  ⚠️  失败率 {error_rate:.0%} > 20%，结果可能不可靠")
+            lines.append(f"  [WARN] 失败率 {error_rate:.0%} > 20%，结果可能不可靠")
 
     lines.append("=" * 60)
     return "\n".join(lines)

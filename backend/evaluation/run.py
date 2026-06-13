@@ -45,23 +45,27 @@ def main() -> int:
     level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=level, format="%(levelname)s | %(message)s")
 
+    # 强制 stdout 行缓冲，确保后台任务（如 Claude Code background）能看到实时日志
+    import sys
+    sys.stdout.reconfigure(line_buffering=True)
+
     # 1. 前置检查
     from app.config import get_settings
     settings = get_settings()
     if not settings.zhipu_api_key:
-        print("❌ 缺少 ZHIPU_API_KEY，请在 .env 中配置", file=sys.stderr)
+        print("[ERR] 缺少 ZHIPU_API_KEY，请在 .env 中配置", file=sys.stderr)
         return 1
 
     # 2. 加载数据集
     eval_path = Path(__file__).parent / "eval_dataset.json"
     if not eval_path.exists():
-        print(f"❌ 数据集不存在: {eval_path}", file=sys.stderr)
+        print(f"[ERR] 数据集不存在: {eval_path}", file=sys.stderr)
         return 1
 
     eval_data = json.loads(eval_path.read_text(encoding="utf-8"))
     eval_items = [item for item in eval_data if item.get("type") != "irrelevant"]
     if not eval_items:
-        print("❌ 评估数据集为空", file=sys.stderr)
+        print("[ERR] 评估数据集为空", file=sys.stderr)
         return 1
 
     logger.info(f"加载 {len(eval_items)} 道评估题（模式: {args.mode}）")
@@ -91,10 +95,10 @@ def main() -> int:
         print(f"Answer 长度: {len(result.get('answer', ''))}")
         print(f"Sources: {len(result.get('sources', []))}")
         if result.get("answer"):
-            print("✅ Sanity 通过")
+            print("[OK] Sanity passed")
             return 0
         else:
-            print("❌ Sanity 失败：答案为空")
+            print("[FAIL] Sanity failed: empty answer")
             return 1
 
     # 5. 报告生成
@@ -118,13 +122,13 @@ def main() -> int:
         if changes:
             print("\n=== 回归检测 ===")
             for ch in changes:
-                flag = "⚠️ " if ch["regression"] else ("✅ " if ch["improvement"] else "  ")
+                flag = "[REGR]" if ch["regression"] else ("[IMPR]" if ch["improvement"] else "     ")
                 print(f"  {flag}{ch['metric']:25s}  {ch['old']:.4f} → {ch['new']:.4f}  ({ch['change']:+.4f})")
             if any(ch["regression"] for ch in changes):
-                print("\n⚠️  检测到 RAG 质量回归（指标下降 > 5%）")
+                print("\n[REGR] 检测到 RAG 质量回归（指标下降 > 5%）")
                 return 1  # exit 1 触发 CI 失败
         else:
-            print("\n✅ 无历史结果可对比（首次评估）")
+            print("\n[OK] 无历史结果可对比（首次评估）")
 
     # 7. 持久化
     if aggregated:

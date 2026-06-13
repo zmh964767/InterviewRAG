@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     llm_model: str = "glm-4-flash"
     llm_temperature: float = 0.7
     llm_max_tokens: int = 8192
+    llm_timeout_s: float = 30.0  # LLM API 调用超时；超时抛 ExternalServiceError
 
     # Embedding 参数
     embedding_model: str = "embedding-3"
