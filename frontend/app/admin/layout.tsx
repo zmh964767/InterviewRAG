@@ -49,7 +49,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
         <div className="h-14 px-5 flex items-center border-b" style={{ borderColor: 'var(--border)' }}>
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'var(--accent)' }}>
-              <span className="text-sm" style={{ fontFamily: 'var(--font-display)', color: 'var(--cream)', fontWeight: 600 }}>A</span>
+              <span className="text-sm" style={{ fontFamily: 'var(--font-display)', color: '#ffffff', fontWeight: 600 }}>A</span>
             </div>
             <div>
               <div className="text-sm font-semibold" style={{ fontFamily: 'var(--font-display)', color: 'var(--ink)' }}>管理后台</div>
