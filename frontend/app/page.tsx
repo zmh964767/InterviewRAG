@@ -160,7 +160,7 @@ export default function Home() {
           <button
             onClick={confirmDelete}
             className="px-4 py-2 text-sm font-medium rounded-lg transition-all"
-            style={{ background: 'var(--accent)', color: 'var(--cream)' }}
+            style={{ background: 'var(--accent)', color: '#ffffff' }}
           >
             删除
           </button>
