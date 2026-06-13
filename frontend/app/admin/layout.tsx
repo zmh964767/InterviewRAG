@@ -85,7 +85,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
             onClick={() => setShowChangePwd(true)}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
             style={{ color: 'var(--ink-muted)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--cream)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--nav-active-bg)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
@@ -97,7 +97,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
             onClick={() => { logout(); router.replace('/admin/login') }}
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
             style={{ color: 'var(--ink-muted)' }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--cream)' }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--nav-active-bg)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">

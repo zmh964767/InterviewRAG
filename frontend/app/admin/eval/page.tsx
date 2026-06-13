@@ -196,7 +196,7 @@ export default function AdminEvalPage() {
                   <div key={`${snap.timestamp}-${idx}`} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--border-subtle)' }}>
                     <button
                       className="w-full flex items-center justify-between px-5 py-3 text-left transition-colors"
-                      style={{ background: expandedTs === `${snap.timestamp}-${idx}` ? 'var(--cream)' : 'var(--paper)' }}
+                      style={{ background: expandedTs === `${snap.timestamp}-${idx}` ? 'var(--nav-active-bg)' : 'var(--paper)' }}
                       onClick={() => handleExpand(`${snap.timestamp}-${idx}`, snap.timestamp)}
                     >
                       <div className="flex items-center gap-4">
@@ -209,7 +209,7 @@ export default function AdminEvalPage() {
                       </svg>
                     </button>
                     {expandedTs === `${snap.timestamp}-${idx}` && (
-                      <div className="px-5 pb-4" style={{ background: 'var(--cream)' }}>
+                      <div className="px-5 pb-4" style={{ background: 'var(--nav-active-bg)' }}>
                         {detailLoading ? (
                           <p className="text-xs py-2" style={{ color: 'var(--ink-muted)' }}>{EVAL.LOAD_DETAIL}</p>
                         ) : expandedDetail ? (
