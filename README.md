@@ -19,13 +19,14 @@
 - **骨架屏加载**：列表/报告加载时显示 shimmer 占位
 - **无障碍**：focus-visible ring + Modal 焦点陷阱 + skip link + prefers-reduced-motion
 - **双端架构**：用户端（匿名访问问答 + 题目库只读）+ 管理端（JWT 鉴权的知识库/评估后台）
+- **LLM Provider 抽象**：接口化设计，改一行 `.env` 即可在智谱 / OpenAI / 兼容端点间切换，无需改代码
 
 ## 🏗️ 技术栈
 
 | 层 | 技术 |
 |---|---|
-| LLM | 智谱 GLM-4-Flash |
-| Embedding | 智谱 embedding-3 |
+| LLM | 智谱 GLM-4-Flash / OpenAI GPT / 任意兼容端点（通过 Provider 抽象切换） |
+| Embedding | 智谱 embedding-3 / OpenAI text-embedding-3-small / 任意兼容端点 |
 | 向量数据库 | ChromaDB |
 | 关键词检索 | BM25 (rank_bm25) |
 | RAG 编排 | LangChain |
@@ -48,6 +49,7 @@ InterviewRAG/
 │   │   ├── retrievers/   # 检索器（混合、小块大块）
 │   │   ├── rerankers/    # Re-ranking
 │   │   ├── parsers/      # 数据解析（MD/PDF/网页）
+│   │   ├── providers/    # LLM / Embedding Provider 抽象（接口 + 智谱/OpenAI 实现 + 工厂）
 │   │   ├── models/       # 数据模型
 │   │   ├── services/     # 业务逻辑
 │   │   └── core/         # 核心工具
@@ -95,6 +97,20 @@ docker compose build --no-cache  # 重新构建镜像
 ```
 
 > **注意**：默认 `SKIP_RERANKER=1` 跳过 BGE Re-ranker(Windows/Linux 容器内都建议跳过,需在 backend 目录单独启用)。需要 Re-ranker 时去掉 `docker-compose.yml` 里那一行,镜像会变大(~1GB)。
+
+**切换 LLM Provider**：改 `.env` 后重启即可切换到 OpenAI 或任意兼容端点，无需改代码：
+
+```bash
+# 切换到 OpenAI
+LLM_PROVIDER=openai
+EMBEDDING_PROVIDER=openai
+OPENAI_API_KEY=sk-xxx
+
+# 切换到 Ollama（本地）
+LLM_PROVIDER=openai
+OPENAI_API_KEY=ollama
+OPENAI_BASE_URL=http://localhost:11434/v1
+```
 
 ## 🚀 快速开始
 
@@ -160,6 +176,8 @@ cat evaluation/report.md
 **环境变量**：
 - `SKIP_RERANKER=1`：跳过 BGE Re-ranker（Windows 必需）
 - `ZHIPU_API_KEY`：智谱 API 密钥（.env 文件配置）
+- `LLM_PROVIDER` / `EMBEDDING_PROVIDER`：选择 Provider（`zhipu` / `openai`，默认 `zhipu`）
+- `OPENAI_API_KEY` / `OPENAI_BASE_URL`：OpenAI / 兼容端点配置（Provider 为 `openai` 时必填）
 
 ### 5. 测试
 
@@ -172,7 +190,7 @@ npx tsc --noEmit  # TypeScript 类型检查（0 errors）
 
 ```bash
 cd backend
-pytest tests/ -v  # 21 个测试文件，214 个测试（含 API/数据库/评估/反馈/embed/llm/rag）
+pytest tests/ -v  # 23 个测试文件，246 个测试（含 API/数据库/评估/反馈/embed/llm/rag/provider）
 ```
 
 ## 📊 检索策略对比
@@ -253,8 +271,9 @@ python -m evaluation.sweep
 |---|---|---|
 | ~~**Docker 部署**~~ | ~~Dockerfile + docker-compose(前端 + 后端 + ChromaDB),一键启动~~ ✅ | ~~1 天~~ |
 | ~~**流式性能优化**~~ | ~~`mergePartialIntoConversation` 每 token 全数组重建 → 改用 `useReducer`；react-markdown 逐 token 重解析 → 50ms 节流~~ ✅ | ~~1-2 天~~ |
-| ~~**后端单测补全**~~ | ~~`services/` + `api/` 单测覆盖率补齐（当前 21 个测试文件，含 embed/llm/rag 3 个核心服务，214 个测试）~~ ✅ | ~~1 天~~ |
+| ~~**后端单测补全**~~ | ~~`services/` + `api/` 单测覆盖率补齐（当前 23 个测试文件，含 embed/llm/rag/provider 等，246 个测试）~~ ✅ | ~~1 天~~ |
 | ~~**知识库批量操作**~~ | ~~多选 + 批量删除 + 批量导入~~ ✅ | ~~1 天~~ |
+| ~~**LLM Provider 抽象**~~ | ~~从智谱硬编码到接口化设计，支持一键切换 OpenAI/兼容端点~~ ✅ | ~~1 天~~ |
 
 ### 中优先级
 
@@ -266,16 +285,19 @@ python -m evaluation.sweep
 | ~~**评估历史对比**~~ | ~~两次评估快照的指标 diff 展示~~ ✅ | ~~1 天~~ |
 | ~~**Sweep 参数扫描 UI**~~ | ~~`evaluation/sweep.py` 结果展示 + winner 推荐~~ ✅ | ~~1 天~~ |
 | ~~**用户反馈系统**~~ | ~~对回答点赞/点踩 + 反馈收集 + 管理端统计/列表/导出 CSV + 跳回原对话~~ ✅ | ~~1 天~~ |
+| ~~**多模型支持**~~ | ~~接口化 LLM Provider 抽象，改 .env 即可切换智谱/OpenAI 等~~ ✅ | ~~1 天~~ |
 
 ### 低优先级
 
 | 方向 | 说明 | 预估工作量 |
 |---|---|---|
+| **检索链路 Tracing** | OpenTelemetry 接入 RAG 流水线，定位耗时瓶颈 | 1 天 |
+| **LLM 输出缓存** | 相同 query 命中缓存直接返回，降低 API 成本 | 0.5 天 |
+| **RAGAS checkpoint 恢复** | 评估跑到一半崩了不用重跑全部 | 0.5 天 |
 | **知识库版本管理** | 导入/删除操作的版本快照 + 回滚 | 2 天 |
 | **反馈数据 → Sweep 关联** | 把差评率低的 prompt variant 自动标记,辅助 sweep 调优 | 1 天 |
-| **多模型支持** | 接入 OpenAI / Claude 等其他 LLM | 1 天 |
-| **Redis 会话存储** | 后端 conversations 从内存 dict 迁移到 Redis | 半天 |
-| **后端 Docker 镜像瘦身** | 多阶段构建 + `sentence-transformers` 改可选依赖，目标 < 2.5GB（当前 3.22GB） | 半天 |
+| **Redis 会话存储** | 后端 conversations 从内存 dict 迁移到 Redis | 0.5 天 |
+| **后端 Docker 镜像瘦身** | 多阶段构建 + `sentence-transformers` 改可选依赖，目标 < 2.5GB（当前 3.22GB） | 0.5 天 |
 
 ## License
 
