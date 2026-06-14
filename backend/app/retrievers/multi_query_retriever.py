@@ -44,14 +44,22 @@ class MultiQueryRetriever:
         queries: list[str],
         top_k: int | None = None,
     ) -> list[dict]:
-        """同步入口：对 queries 并发跑 hybrid.retrieve，合并去重。"""
-        loop = asyncio.new_event_loop()
+        """同步入口：对 queries 并发跑 hybrid.retrieve，合并去重。
+
+        自动适配 async 上下文：已有 running loop 时在线程中跑独立事件循环，
+        避免 asyncio.new_event_loop() 在 async 上下文中崩溃（Python 3.10+）。
+        """
+        coro = self.aretrieve_with_queries(queries, top_k)
         try:
-            return loop.run_until_complete(
-                self.aretrieve_with_queries(queries, top_k)
-            )
-        finally:
-            loop.close()
+            asyncio.get_running_loop()
+        except RuntimeError:
+            # 没有 running loop → 直接 run（原行为）
+            return asyncio.run(coro)
+        else:
+            # 已有 running loop → 在线程中跑独立 event loop
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
 
     async def aretrieve_with_queries(
         self,
