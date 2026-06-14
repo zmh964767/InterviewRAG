@@ -345,10 +345,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let sources: SourceRef[] = []
 
       try {
+        // 传入最近 20 条消息（10 轮 = 后端 memory_window * 2），让 LLM 知道上下文
+        const conv = conversationsRef.current.find(c => c.id === conversationId)
+        const history = conv?.messages?.slice(-20) || []
         for await (const event of queryStream(
           content,
           conversationId,
-          [],
+          history,
           controller.signal,
         )) {
           // 中断检查：用局部 controller，不读 ref（ref 可能已被下一轮 sendMessage 覆盖）。
