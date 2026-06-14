@@ -10,6 +10,7 @@
 3. 命中后，去重取回对应的大块送给 LLM
 """
 
+import asyncio
 import logging
 
 from app.config import get_settings
@@ -148,3 +149,16 @@ class SmallToBigRetriever:
         )
 
         return sorted_chunks[:top_k]
+
+    async def aretrieve(
+        self,
+        query: str,
+        top_k: int = 5,
+        n_candidates: int = 20,
+    ) -> list[dict]:
+        """Async 入口，async 上下文使用。"""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.retrieve(query=query, top_k=top_k, n_candidates=n_candidates),
+        )

@@ -480,12 +480,12 @@ async def run_comparison_evaluation(items: list[dict]) -> dict:
 
     async def plan_b(question: str) -> dict:
         """方案 B：混合检索（向量 + BM25）"""
-        results = hybrid_retriever.retrieve(query=question, top_k=5)
+        results = await hybrid_retriever.aretrieve(query=question, top_k=5)
         return {"sources": results}
 
     async def plan_c(question: str) -> dict:
         """方案 C：混合检索 + Re-ranking"""
-        results = hybrid_retriever.retrieve(query=question, top_k=20)
+        results = await hybrid_retriever.aretrieve(query=question, top_k=20)
         # BGE Re-ranker 在 Windows 上加载极慢，单独 try/except 隔离
         try:
             if reranker.is_available():
@@ -497,7 +497,7 @@ async def run_comparison_evaluation(items: list[dict]) -> dict:
 
     async def plan_d(question: str) -> dict:
         """方案 D：小块检索 + 大块生成"""
-        results = s2b_retriever.retrieve(query=question, top_k=5, n_candidates=20)
+        results = await s2b_retriever.aretrieve(query=question, top_k=5, n_candidates=20)
         return {"sources": results}
 
     async def plan_e(question: str) -> dict:

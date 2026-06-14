@@ -6,6 +6,7 @@
 BM25 分词使用 jieba（中文友好），索引通过版本号懒刷新自动保鲜。
 """
 
+import asyncio
 import logging
 
 import jieba
@@ -100,6 +101,23 @@ class HybridRetriever:
         )
 
         return merged[:top_k]
+
+    async def aretrieve(
+        self,
+        query: str,
+        top_k: int = 10,
+        alpha: float | None = None,
+    ) -> list[dict]:
+        """Async 入口，async 上下文使用。
+
+        内部用 loop.run_in_executor 包 sync retrieve()，把 ZhipuAI 同步 HTTP 调用
+        移到线程池，事件循环不被阻塞。返回结构与 retrieve() 完全一致。
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None,
+            lambda: self.retrieve(query=query, top_k=top_k, alpha=alpha),
+        )
 
     def _vector_search(self, query: str, k: int) -> list[dict]:
         """向量检索"""
