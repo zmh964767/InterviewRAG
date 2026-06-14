@@ -38,10 +38,13 @@ async def query_endpoint(
     history = query_req.chat_history or conversations.get(conversation_id, [])
 
     if query_req.stream:
-        return StreamingResponse(
+        response = StreamingResponse(
             stream_generator(rag_service, query_req.question, history, conversation_id, request),
             media_type="text/event-stream",
         )
+        response.headers["Cache-Control"] = "no-cache, no-transform"
+        response.headers["X-Accel-Buffering"] = "no"
+        return response
 
     # 普通返回
     result = await rag_service.query(

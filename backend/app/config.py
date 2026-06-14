@@ -46,7 +46,16 @@ class Settings(BaseSettings):
     memory_window: int = 10
 
     # CORS（逗号分隔的域名列表，如 "http://localhost:3000,https://example.com"）
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # dev 模式加 :3004 是因为 Next.js dev server 3000 端口常被占用，前端会跑到 3001~3004。
+    # 生产部署前应改为具体域名。
+    cors_origins: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+        "http://localhost:3004",
+        "http://localhost:3005",
+    ]
 
     # Provider 选择
     llm_provider: str = "zhipu"           # "zhipu" | "openai"

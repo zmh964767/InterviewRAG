@@ -25,6 +25,12 @@ import type {
 
 const API_BASE = ''  // 空字符串 → 相对路径，走 Next.js rewrites 代理（Docker 生产由 NEXT_PUBLIC_API_URL 覆盖）
 
+// 流式 SSE 需要直连 backend（Next.js dev server rewrite 缓冲 SSE，无法产生打字机效果）
+// 生产环境由 NEXT_PUBLIC_API_URL 统一控制
+const SSE_API_BASE = typeof window !== 'undefined' && process.env.NODE_ENV === 'development'
+  ? 'http://localhost:8080'
+  : API_BASE
+
 /** 普通查询 */
 export async function query(request: QueryRequest): Promise<QueryResponse> {
   const res = await fetch(`${API_BASE}/api/query`, {
@@ -41,14 +47,14 @@ export async function query(request: QueryRequest): Promise<QueryResponse> {
   return res.json()
 }
 
-/** 流式查询（SSE） */
+/** 流式查询（SSE — 直连 backend 避免 proxy 缓冲） */
 export async function* queryStream(
   question: string,
   conversationId?: string,
   chatHistory?: Array<{ role: string; content: string }>,
   signal?: AbortSignal,
 ): AsyncGenerator<StreamEvent> {
-  const res = await fetch(`${API_BASE}/api/query`, {
+  const res = await fetch(`${SSE_API_BASE}/api/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
