@@ -57,8 +57,6 @@ export interface ChatContextValue {
   abort: () => void
   continueLast: () => Promise<void>
   clearError: (messageId?: string) => void
-  subscribe: (cb: (partial: StreamPartial | null) => void) => () => void
-  getPartial: () => StreamPartial | null
 
   // 对话管理
   conversations: Conversation[]
@@ -210,14 +208,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   // 手动点停止 = 显示"重新生成"banner（用户留在当前对话，想重试）。
   // 切会话 = 不触发 abort（旧流后台继续生成）。
   const userStopRef = useRef(false)
-  const subscribersRef = useRef<Set<(p: StreamPartial | null) => void>>(
-    new Set(),
-  )
   const partialRef = useRef<StreamPartial | null>(null)
   const currentIdRef = useRef<string | null>(null)
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hasHydratedRef = useRef(false)
   const isLoadingRef = useRef(false)
+  // 跟踪刚刚 createConversation() 创建的 id：sendMessage 看到此 ref 就知道
+  // 不需要再 dispatch CREATE，避免 React dispatch 异步导致的双 CREATE bug。
+  const justCreatedIdRef = useRef<string | null>(null)
   isLoadingRef.current = isLoading
 
   partialRef.current = partial
@@ -251,14 +249,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [conversations, currentId])
 
   // ---- 流式控制 ----
-  const subscribe = useCallback((cb: (p: StreamPartial | null) => void) => {
-    subscribersRef.current.add(cb)
-    return () => {
-      subscribersRef.current.delete(cb)
-    }
-  }, [])
-
-  const getPartial = useCallback(() => partialRef.current, [])
 
   const sendMessage = useCallback(
     async (content: string, conversationId: string, options?: { existingAiMsgId?: string; skipUser?: boolean }) => {
@@ -314,10 +304,17 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           conversationId,
         }
         const existingConv = conversationsRef.current.find(c => c.id === conversationId)
-        if (!existingConv) {
+        // ★ 用 justCreatedIdRef 判断"刚刚在 createConversation() 创建过"。
+        //   不用 conversationsRef.current.find（因为 dispatch 异步、ref 还没刷新），
+        //   否则会再 dispatch 一次 CREATE，导致侧边栏出现两条相同 id 的会话。
+        if (!existingConv && justCreatedIdRef.current !== conversationId) {
           dispatch({ type: 'CREATE', payload: createEmptyConversationWithId(conversationId) })
         }
         const isFirstUser = !existingConv || existingConv.messages.length === 0
+        // 同一会话复用：消费完 ref，避免下一轮误判
+        if (justCreatedIdRef.current === conversationId) {
+          justCreatedIdRef.current = null
+        }
         dispatch({
           type: 'APPEND_USER_AI',
           payload: { convId: conversationId, userMsg, aiMsg, isFirstUser }
@@ -374,7 +371,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             setPartial(updated)
             partialRef.current = updated
             dispatch({ type: 'REPLACE_MESSAGE', payload: { convId: updated.convId, aiMsgId: updated.aiMsgId, content: updated.content, sources: updated.sources } })
-            subscribersRef.current.forEach((cb) => cb(updated))
           }
 
           if (event.done) {
@@ -389,7 +385,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               setPartial(updated)
               partialRef.current = updated
               dispatch({ type: 'REPLACE_MESSAGE', payload: { convId: updated.convId, aiMsgId: updated.aiMsgId, content: updated.content, sources: updated.sources } })
-              subscribersRef.current.forEach((cb) => cb(updated))
             }
           }
         }
@@ -474,6 +469,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const newConv = createEmptyConversation()
     dispatch({ type: 'CREATE', payload: newConv })
     setCurrentId(newConv.id)
+    justCreatedIdRef.current = newConv.id
     return newConv.id
   }, [])
 
@@ -492,9 +488,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const remaining = conversationsRef.current.filter(c => c.id !== id)
     dispatch({ type: 'DELETE', payload: { id } })
     if (remaining.length === 0) {
+      // 跟 createConversation() 一样记录到 justCreatedIdRef，
+      // 避免用户删空后立刻发消息触发双 CREATE。
       const newConv = createEmptyConversation()
       dispatch({ type: 'CREATE', payload: newConv })
       setCurrentId(newConv.id)
+      justCreatedIdRef.current = newConv.id
     } else if (currentIdRef.current === id) {
       setCurrentId(remaining[0].id)
     }
@@ -528,8 +527,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     abort,
     continueLast,
     clearError,
-    subscribe,
-    getPartial,
     conversations,
     currentId,
     currentConversation,
