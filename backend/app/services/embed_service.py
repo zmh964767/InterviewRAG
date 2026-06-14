@@ -1,50 +1,30 @@
-"""智谱 Embedding 服务封装"""
+"""Embedding 服务封装（Facade）
 
-import logging
+委托给 EmbeddingProvider 实际执行，保持向后兼容的导入路径。
+"""
 
-from zhipuai import ZhipuAI
-
-from app.config import get_settings
-from app.core.exceptions import ExternalServiceError
-
-logger = logging.getLogger(__name__)
+from app.providers import EmbeddingProvider, create_embedding_provider
 
 
 class EmbedService:
-    """智谱 Embedding 服务"""
+    """Embedding 服务
 
-    def __init__(self):
-        settings = get_settings()
-        if not settings.zhipu_api_key:
-            raise ExternalServiceError("智谱API", "未配置 ZHIPU_API_KEY")
+    轻量 facade 委托给 EmbeddingProvider。
+    可直接构造，也可注入自定义 Provider：
 
-        self.client = ZhipuAI(
-            api_key=settings.zhipu_api_key,
-            timeout=settings.llm_timeout_s,
-        )
-        self.model = settings.embedding_model
-        logger.info(f"智谱 Embedding 已初始化，模型: {self.model}")
+        service = EmbedService()
+        service = EmbedService(provider=MyEmbeddingProvider())
+    """
+
+    def __init__(self, provider: EmbeddingProvider | None = None):
+        self._provider = provider or create_embedding_provider()
+
+    @property
+    def provider(self) -> EmbeddingProvider:
+        return self._provider
 
     def embed_query(self, text: str) -> list[float]:
-        """将文本转为向量"""
-        try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=text,
-            )
-            return response.data[0].embedding
-        except Exception as e:
-            logger.error(f"Embedding 调用失败: {e}")
-            raise ExternalServiceError("智谱Embedding", str(e))
+        return self._provider.embed_query(text)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        """批量将文本转为向量"""
-        try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=texts,
-            )
-            return [item.embedding for item in response.data]
-        except Exception as e:
-            logger.error(f"批量 Embedding 调用失败: {e}")
-            raise ExternalServiceError("智谱Embedding", str(e))
+        return self._provider.embed_documents(texts)

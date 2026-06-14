@@ -48,6 +48,16 @@ class Settings(BaseSettings):
     # CORS（逗号分隔的域名列表，如 "http://localhost:3000,https://example.com"）
     cors_origins: list[str] = ["http://localhost:3000"]
 
+    # Provider 选择
+    llm_provider: str = "zhipu"           # "zhipu" | "openai"
+    embedding_provider: str = "zhipu"     # "zhipu" | "openai"
+
+    # OpenAI 兼容端点（llm/embedding_provider="openai" 时启用）
+    openai_api_key: str = ""
+    openai_base_url: str = ""             # 空字串 → OpenAI client 传 None（即官方默认）
+    openai_llm_model: str = ""            # 覆盖 llm_model，空字串时 fallback 到 llm_model
+    openai_embedding_model: str = ""      # 覆盖 embedding_model，空字串时 fallback 到 embedding_model
+
     # 管理员认证
     admin_password: str = "admin123"
     jwt_secret_key: str = ""  # 空值时由 app.auth 模块启动时自动生成

@@ -1,6 +1,6 @@
 """ChromaDB 向量存储封装
 
-使用智谱 API 做 embedding，不依赖 ChromaDB 默认的 ONNX 模型。
+通过 EmbeddingProvider 做 embedding，不依赖 ChromaDB 默认的 ONNX 模型。
 """
 
 import logging
@@ -11,6 +11,7 @@ from chromadb.config import Settings as ChromaSettings
 from chromadb.api.types import EmbeddingFunction, Documents, Embeddings
 
 from app.config import get_settings
+from app.providers import EmbeddingProvider, create_embedding_provider
 
 logger = logging.getLogger(__name__)
 
@@ -18,28 +19,17 @@ logger = logging.getLogger(__name__)
 COLLECTION_NAME = "interview_questions"
 
 
-class ZhipuEmbeddingFunction(EmbeddingFunction):
-    """使用智谱 API 的 embedding 函数"""
+class ChromaEmbeddingFunction(EmbeddingFunction):
+    """适配 ChromaDB 接口：内部调 EmbeddingProvider"""
 
-    def __init__(self):
-        from zhipuai import ZhipuAI
-        settings = get_settings()
-        self.client = ZhipuAI(
-            api_key=settings.zhipu_api_key,
-            timeout=settings.llm_timeout_s,
-        )
-        self.model = settings.embedding_model
+    def __init__(self, provider: EmbeddingProvider):
+        self._provider = provider
 
     def __call__(self, input: Documents) -> Embeddings:
-        """将文本列表转为向量列表"""
         try:
-            response = self.client.embeddings.create(
-                model=self.model,
-                input=input,
-            )
-            return [item.embedding for item in response.data]
+            return self._provider.embed_documents(list(input))
         except Exception as e:
-            logger.error(f"智谱 Embedding 调用失败: {e}")
+            logger.error(f"Embedding 计算失败: {e}")
             raise
 
 
@@ -56,8 +46,9 @@ class VectorStore:
             settings=ChromaSettings(anonymized_telemetry=False),
         )
 
-        # 使用智谱 embedding 函数
-        self.embed_fn = ZhipuEmbeddingFunction()
+        # 使用配置的 embedding provider
+        provider = create_embedding_provider()
+        self.embed_fn = ChromaEmbeddingFunction(provider)
 
         self.collection = self.client.get_or_create_collection(
             name=COLLECTION_NAME,

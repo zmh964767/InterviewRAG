@@ -1,56 +1,65 @@
-"""LLMService 单测"""
+"""LLMService 单测（Facade 层）
+
+测试委托逻辑和 sync→async stream 适配。
+Provider 实现本身的测试见 test_providers.py。
+"""
 
 import pytest
 from unittest.mock import MagicMock
 
 from app.services.llm_service import LLMService
-from app.core.exceptions import ExternalServiceError
+from app.providers import LLMProvider
+
+
+def _make_mock_provider():
+    """创建 mock LLMProvider"""
+    provider = MagicMock(spec=LLMProvider)
+    provider.chat.return_value = "mock answer"
+    provider.chat_stream.return_value = iter(["mock ", "answer"])
+    provider.check_health.return_value = "ok"
+    return provider
 
 
 @pytest.fixture
-def llm_service(monkeypatch):
-    """构造 LLMService，mock 掉 ZhipuAI client"""
-    mock_settings = MagicMock(
-        zhipu_api_key="test-key",
-        llm_model="glm-4-flash",
-        llm_temperature=0.7,
-        llm_max_tokens=2048,
-    )
-    monkeypatch.setattr("app.services.llm_service.get_settings", lambda: mock_settings)
-    monkeypatch.setattr("app.services.llm_service.ZhipuAI", MagicMock)
-    service = LLMService()
-    return service
+def llm_service():
+    provider = _make_mock_provider()
+    return LLMService(provider=provider)
 
 
 def test_chat_happy(llm_service):
-    """happy path: chat 返回文本"""
-    mock_resp = MagicMock()
-    mock_resp.choices = [MagicMock(message=MagicMock(content="这是一个回答"))]
-    llm_service.client.chat.completions.create = MagicMock(return_value=mock_resp)
-
+    """chat 委托给 provider 并返回结果"""
     result = llm_service.chat([{"role": "user", "content": "你好"}])
-    assert result == "这是一个回答"
+    assert result == "mock answer"
+    llm_service.provider.chat.assert_called_once()
+
+
+def test_chat_passes_kwargs(llm_service):
+    """temperature / max_tokens 透传给 provider"""
+    llm_service.chat([{"role": "user", "content": "hi"}], temperature=0.5, max_tokens=100)
+    llm_service.provider.chat.assert_called_with(
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.5,
+        max_tokens=100,
+    )
 
 
 @pytest.mark.asyncio
 async def test_chat_stream_happy(llm_service):
-    """happy path: chat_stream 流式返回多个 chunk"""
-    chunks = [
-        MagicMock(choices=[MagicMock(delta=MagicMock(content="你"))]),
-        MagicMock(choices=[MagicMock(delta=MagicMock(content="好"))]),
-        MagicMock(choices=[MagicMock(delta=MagicMock(content=None))]),
-    ]
-    llm_service.client.chat.completions.create = MagicMock(return_value=iter(chunks))
-
+    """chat_stream 将 sync generator 转 async generator"""
     tokens = []
     async for token in llm_service.chat_stream([{"role": "user", "content": "你好"}]):
         tokens.append(token)
-    assert tokens == ["你", "好"]
+    assert tokens == ["mock ", "answer"]
 
 
-def test_chat_api_error(llm_service):
-    """error path: API 调用失败抛出 ExternalServiceError"""
-    llm_service.client.chat.completions.create = MagicMock(side_effect=Exception("API error"))
+def test_check_health(llm_service):
+    """check_health 委托给 provider"""
+    assert llm_service.check_health() == "ok"
+    llm_service.provider.check_health.assert_called_once()
 
-    with pytest.raises(ExternalServiceError, match="智谱API"):
-        llm_service.chat([{"role": "user", "content": "你好"}])
+
+def test_default_provider():
+    """不传 provider 时自动创建默认 Provider"""
+    service = LLMService()
+    assert service.provider is not None
+    assert isinstance(service.provider, LLMProvider)
