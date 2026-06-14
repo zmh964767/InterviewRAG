@@ -3,11 +3,6 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { submitFeedback, adminGetFeedback, adminGetFeedbackStats } from '@/lib/api'
 import { FeedbackView } from '@/components/eval/FeedbackView'
 
-// Mock localStorage for adminHeaders()
-beforeEach(() => {
-  localStorage.clear()
-})
-
 describe('submitFeedback', () => {
   it('sends POST to /api/feedback with body and Content-Type', async () => {
     const mockResponse = { id: 'fb-1', message_id: 'm-1' }
@@ -62,10 +57,6 @@ describe('submitFeedback', () => {
 })
 
 describe('adminGetFeedback', () => {
-  beforeEach(() => {
-    localStorage.setItem('admin_token', 'test-token')
-  })
-
   it('passes query params correctly', async () => {
     const mockResponse = { items: [], total: 0, page: 2, size: 10 }
     const fetchMock = vi.fn().mockResolvedValue({
@@ -84,7 +75,7 @@ describe('adminGetFeedback', () => {
     expect(url).toContain('since=2026-06-01+00%3A00%3A00')
     expect(url).toContain('page=2')
     expect(url).toContain('size=10')
-    expect(init.headers.Authorization).toBe('Bearer test-token')
+    expect(init.credentials).toBe('include')
   })
 
   it('omits undefined params', async () => {
@@ -102,10 +93,6 @@ describe('adminGetFeedback', () => {
 })
 
 describe('adminGetFeedbackStats', () => {
-  beforeEach(() => {
-    localStorage.setItem('admin_token', 'test-token')
-  })
-
   it('appends since param when provided', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -122,9 +109,6 @@ describe('adminGetFeedbackStats', () => {
 })
 
 describe('FeedbackView', () => {
-  beforeEach(() => {
-    localStorage.setItem('admin_token', 'test-token')
-  })
 
   it('renders 3 stat badges with values from stats', async () => {
     const mockStats = { positive: 3, negative: 2, total: 5, rate: 0.4 }

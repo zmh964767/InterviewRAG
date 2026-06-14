@@ -67,8 +67,8 @@ class Settings(BaseSettings):
     openai_llm_model: str = ""            # 覆盖 llm_model，空字串时 fallback 到 llm_model
     openai_embedding_model: str = ""      # 覆盖 embedding_model，空字串时 fallback 到 embedding_model
 
-    # 管理员认证
-    admin_password: str = "admin123"
+    # 管理员认证（生产环境务必通过 ADMIN_PASSWORD 环境变量设置）
+    admin_password: str = ""
     jwt_secret_key: str = ""  # 空值时由 app.auth 模块启动时自动生成
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440  # 24 小时

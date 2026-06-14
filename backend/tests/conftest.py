@@ -14,6 +14,7 @@ from app.api import admin_ingest as admin_ingest_mod
 
 # CI 没有 .env 文件,确保 RAGService 初始化时不会因缺少 API key 崩溃
 os.environ.setdefault("ZHIPU_API_KEY", "test-key-for-ci")
+os.environ.setdefault("ADMIN_PASSWORD", "admin123")
 
 
 class _FakeCollection:

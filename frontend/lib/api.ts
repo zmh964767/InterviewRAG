@@ -158,15 +158,15 @@ export async function listQuestions(
 }
 
 // =========================================================================
-// 管理端 API（带 JWT token）
+// 管理端 API（httpOnly cookie 自动携带 JWT）
 // =========================================================================
 
-function adminHeaders(): HeadersInit {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_token') : null
-  const h: HeadersInit = { 'Content-Type': 'application/json' }
-  if (token) (h as Record<string, string>)['Authorization'] = `Bearer ${token}`
-  return h
-}
+/** 通用 fetch 选项：携带 cookie（JWT httpOnly cookie 自动随请求发送） */
+const FETCH_OPTS: RequestInit = { credentials: 'include' }
+
+/** 管理端：题目列表（功能同公开，但走 /api/admin/）
+
+
 
 /** 管理端：题目列表（功能同公开，但走 /api/admin/） */
 export async function adminListQuestions(
@@ -179,7 +179,7 @@ export async function adminListQuestions(
   if (request.category) params.set('category', request.category)
   if (request.difficulty) params.set('difficulty', request.difficulty)
 
-  const res = await fetch(`${API_BASE}/api/admin/questions?${params.toString()}`, { headers: adminHeaders() })
+  const res = await fetch(`${API_BASE}/api/admin/questions?${params.toString()}`, FETCH_OPTS)
   if (!res.ok) throw new Error(`列表查询失败: HTTP ${res.status}`)
   return res.json()
 }
@@ -188,7 +188,7 @@ export async function adminListQuestions(
 export async function adminDeleteQuestion(id: string): Promise<DeleteQuestionResponse> {
   const res = await fetch(`${API_BASE}/api/admin/questions/${encodeURIComponent(id)}`, {
     method: 'DELETE',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '删除失败' }))
@@ -201,7 +201,7 @@ export async function adminDeleteQuestion(id: string): Promise<DeleteQuestionRes
 export async function adminBatchDelete(ids: string[]): Promise<{ deleted: number }> {
   const res = await fetch(`${API_BASE}/api/admin/questions/batch-delete`, {
     method: 'POST',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     body: JSON.stringify({ ids }),
   })
   if (!res.ok) {
@@ -218,7 +218,7 @@ export async function adminUpdateQuestion(
 ): Promise<Question> {
   const res = await fetch(`${API_BASE}/api/admin/questions/${encodeURIComponent(id)}`, {
     method: 'PUT',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     body: JSON.stringify(fields),
   })
   if (!res.ok) {
@@ -231,7 +231,7 @@ export async function adminUpdateQuestion(
 /** 管理端：统计 */
 export async function adminGetStats(signal?: AbortSignal): Promise<StatsResponse> {
   const res = await fetch(`${API_BASE}/api/admin/stats`, {
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     signal,
   })
   if (!res.ok) throw new Error('统计查询失败')
@@ -242,7 +242,7 @@ export async function adminGetStats(signal?: AbortSignal): Promise<StatsResponse
 export async function adminInsertOne(request: InsertOneRequest): Promise<Question> {
   const res = await fetch(`${API_BASE}/api/admin/ingest/insert-one`, {
     method: 'POST',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     body: JSON.stringify(request),
   })
   if (!res.ok) {
@@ -259,7 +259,7 @@ export async function adminSubmitIngestTask(
 ): Promise<IngestTaskAccepted> {
   const res = await fetch(`${API_BASE}/api/admin/ingest`, {
     method: 'POST',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     body: JSON.stringify({ source, source_type: sourceType }),
   })
   if (!res.ok) {
@@ -271,15 +271,11 @@ export async function adminSubmitIngestTask(
 
 /** 管理端：上传文件导入 */
 export async function adminUploadIngestFile(file: File): Promise<IngestTaskAccepted> {
-  const token = localStorage.getItem('admin_token')
-  const headers: HeadersInit = {}
-  if (token) (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`
-
   const formData = new FormData()
   formData.append('file', file)
   const res = await fetch(`${API_BASE}/api/admin/ingest/upload`, {
     method: 'POST',
-    headers,
+    ...FETCH_OPTS,
     body: formData,
   })
   if (!res.ok) {
@@ -292,7 +288,7 @@ export async function adminUploadIngestFile(file: File): Promise<IngestTaskAccep
 /** 管理端：评估汇总 */
 export async function adminGetEvalSummary(signal?: AbortSignal): Promise<EvalSummaryResponse> {
   const res = await fetch(`${API_BASE}/api/admin/eval/summary`, {
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     signal,
   })
   if (!res.ok) throw new Error('Failed to fetch eval summary')
@@ -304,7 +300,7 @@ export async function adminGetEvalDetail(ts?: string): Promise<EvalDetailRespons
   const url = ts
     ? `${API_BASE}/api/admin/eval/detail?ts=${encodeURIComponent(ts)}`
     : `${API_BASE}/api/admin/eval/detail`
-  const res = await fetch(url, { headers: adminHeaders() })
+  const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) throw new Error('Failed to fetch eval detail')
   return res.json()
 }
@@ -317,7 +313,7 @@ export async function adminCompareEval(
 ): Promise<CompareResponse> {
   const params = new URLSearchParams({ base, target })
   const res = await fetch(`${API_BASE}/api/admin/eval/compare?${params}`, {
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     signal,
   })
   if (!res.ok) {
@@ -330,7 +326,7 @@ export async function adminCompareEval(
 /** 管理端：sweep 参数扫描结果 + winner */
 export async function adminGetSweep(signal?: AbortSignal): Promise<SweepResponse> {
   const res = await fetch(`${API_BASE}/api/admin/eval/sweep`, {
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     signal,
   })
   if (!res.ok) throw new Error('Failed to fetch sweep results')
@@ -339,14 +335,14 @@ export async function adminGetSweep(signal?: AbortSignal): Promise<SweepResponse
 
 /** 管理端：查询任务状态 */
 export async function adminGetTaskStatus(taskId: string): Promise<TaskStatusResponse> {
-  const res = await fetch(`${API_BASE}/api/admin/ingest/tasks/${encodeURIComponent(taskId)}`, { headers: adminHeaders() })
+  const res = await fetch(`${API_BASE}/api/admin/ingest/tasks/${encodeURIComponent(taskId)}`, FETCH_OPTS)
   if (!res.ok) throw new Error(`任务查询失败: HTTP ${res.status}`)
   return res.json()
 }
 
 /** 管理端：列出未完成任务 */
 export async function adminListActiveTasks(): Promise<TaskListResponse> {
-  const res = await fetch(`${API_BASE}/api/admin/ingest/tasks`, { headers: adminHeaders() })
+  const res = await fetch(`${API_BASE}/api/admin/ingest/tasks`, FETCH_OPTS)
   if (!res.ok) throw new Error(`任务列表查询失败: HTTP ${res.status}`)
   return res.json()
 }
@@ -355,7 +351,7 @@ export async function adminListActiveTasks(): Promise<TaskListResponse> {
 export async function adminRunEval(request: { mode: string }): Promise<{ task_id: string }> {
   const res = await fetch(`${API_BASE}/api/admin/eval/run`, {
     method: 'POST',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     body: JSON.stringify(request),
   })
   if (!res.ok) {
@@ -367,7 +363,7 @@ export async function adminRunEval(request: { mode: string }): Promise<{ task_id
 
 /** 管理端：列出评估任务 */
 export async function adminListEvalTasks(): Promise<TaskListResponse> {
-  const res = await fetch(`${API_BASE}/api/admin/eval/tasks`, { headers: adminHeaders() })
+  const res = await fetch(`${API_BASE}/api/admin/eval/tasks`, FETCH_OPTS)
   if (!res.ok) throw new Error('评估任务列表查询失败')
   return res.json()
 }
@@ -376,7 +372,7 @@ export async function adminListEvalTasks(): Promise<TaskListResponse> {
 export async function adminCancelEval(): Promise<{ cancelled: number }> {
   const res = await fetch(`${API_BASE}/api/admin/eval/cancel`, {
     method: 'POST',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '取消失败' }))
@@ -392,7 +388,7 @@ export async function adminChangePassword(
 ): Promise<{ success: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/api/admin/change-password`, {
     method: 'POST',
-    headers: adminHeaders(),
+    ...FETCH_OPTS,
     body: JSON.stringify({
       current_password: currentPassword,
       new_password: newPassword,
@@ -435,7 +431,7 @@ export async function adminGetFeedback(
   if (params.page) search.set('page', String(params.page))
   if (params.size) search.set('size', String(params.size))
   const url = `${API_BASE}/api/admin/feedback${search.toString() ? `?${search.toString()}` : ''}`
-  const res = await fetch(url, { headers: adminHeaders() })
+  const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '查询失败' }))
     throw new Error(err.detail || `HTTP ${res.status}`)
@@ -448,7 +444,7 @@ export async function adminGetFeedbackStats(since?: string): Promise<FeedbackSta
   const url = since
     ? `${API_BASE}/api/admin/feedback/stats?since=${encodeURIComponent(since)}`
     : `${API_BASE}/api/admin/feedback/stats`
-  const res = await fetch(url, { headers: adminHeaders() })
+  const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '统计查询失败' }))
     throw new Error(err.detail || `HTTP ${res.status}`)
@@ -465,7 +461,7 @@ export async function adminExportFeedback(
   if (params.since) search.set('since', params.since)
   const qs = search.toString()
   const url = `${API_BASE}/api/admin/feedback/export${qs ? `?${qs}` : ''}`
-  const res = await fetch(url, { headers: adminHeaders() })
+  const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '导出失败' }))
     throw new Error(err.detail || `HTTP ${res.status}`)

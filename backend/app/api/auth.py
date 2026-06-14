@@ -1,6 +1,8 @@
 """管理员登录鉴权
 
-POST /api/auth/login — 验证密码 → 签发 JWT
+POST /api/auth/login — 验证密码 → 签发 JWT（httpOnly cookie + JSON body）
+POST /api/auth/logout — 登出（清除 cookie）
+GET  /api/auth/me — 检查当前 cookie 是否有效
 
 修改密码的端点在 app/api/admin_change_password.py（避免循环导入）
 
@@ -13,14 +15,17 @@ import logging
 import os
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException
-from jose import jwt
+from fastapi import APIRouter, HTTPException, Request, Response
+from jose import jwt, JWTError
 from pydantic import BaseModel
 
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+# cookie 名称
+COOKIE_NAME = "admin_token"
 
 # 模块级缓存：JWT 密钥 + 密码覆盖
 _SECRET_KEY: str = ""
@@ -73,9 +78,12 @@ async def login(request: LoginRequest):
     """管理员登录：验证密码 → 签发 JWT"""
     current_pw = get_current_password()
 
+    if not current_pw:
+        logger.error("admin_password 未配置！请设置 ADMIN_PASSWORD 环境变量")
+        raise HTTPException(status_code=503, detail="服务未配置管理员密码，请联系管理员通过环境变量设置")
+
     if request.password != current_pw:
-        if current_pw == "admin123":
-            logger.warning("管理员密码使用默认值！请通过 ADMIN_PASSWORD 环境变量配置，或在管理后台修改密码")
+        logger.warning("管理员登录失败：密码错误")
         raise HTTPException(status_code=401, detail="密码错误")
 
     secret = _ensure_secret()
@@ -90,4 +98,46 @@ async def login(request: LoginRequest):
     }
     access_token = jwt.encode(payload, secret, algorithm=get_settings().jwt_algorithm)
 
-    return LoginResponse(access_token=access_token)
+    response = Response(
+        status_code=200,
+        content=LoginResponse(access_token=access_token).model_dump_json(),
+        media_type="application/json",
+    )
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=access_token,
+        httponly=True,
+        samesite="lax",
+        max_age=get_settings().jwt_expire_minutes * 60,
+        secure=False,  # dev 模式用 http; 生产部署时建议设为 True（需 https）
+        path="/",
+    )
+    return response
+
+
+@router.post("/auth/logout")
+async def logout():
+    """管理员登出：清除 httpOnly cookie"""
+    response = Response(status_code=200, content='{"success":true}')
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path="/",
+    )
+    return response
+
+
+@router.get("/auth/me")
+async def auth_me(request: Request):
+    """检查当前 cookie 是否有效（供前端页面加载时验证登录状态）"""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        raise HTTPException(status_code=401, detail="未登录")
+
+    try:
+        secret = _ensure_secret()
+        settings = get_settings()
+        payload = jwt.decode(token, secret, algorithms=[settings.jwt_algorithm])
+        return {"sub": payload.get("sub"), "role": payload.get("role")}
+    except JWTError as e:
+        logger.warning(f"JWT cookie 验证失败: {e}")
+        raise HTTPException(status_code=401, detail="token 无效或已过期")

@@ -4,9 +4,12 @@
 """
 
 import hashlib
+import ipaddress
 import logging
 import re
+import socket
 import time
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -21,6 +24,9 @@ HEADERS = {
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
+# 禁止的协议
+BLOCKED_SCHEMES = {"file", "ftp", "gopher", "dict", "ldap"}
+
 # 题目识别模式
 QUESTION_PATTERNS = [
     re.compile(r"^[\d]+[.、]\s*(.+)"),  # 1. xxx 或 1、xxx
@@ -28,6 +34,65 @@ QUESTION_PATTERNS = [
     re.compile(r"^问题[\d]*[：:]\s*(.+)"),  # 问题1: xxx
     re.compile(r"^(什么是|请解释|请介绍|如何|为什么|谈谈).+?[？?]?$"),  # 问答句式
 ]
+
+
+def _is_private_ip(ip_str: str) -> bool:
+    """检查 IP 地址是否为私有/内网地址"""
+    try:
+        addr = ipaddress.ip_address(ip_str)
+        return addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_unspecified
+    except ValueError:
+        return False
+
+
+def validate_url(url: str) -> None:
+    """URL SSRF 安全校验
+
+    检查：
+    1. 协议是否白名单（仅 http/https）
+    2. host 是否私有 IP 或内网域名
+    3. DNS 解析结果是否指向内网
+
+    Raises:
+        ValueError: URL 不安全
+    """
+    parsed = urlparse(url)
+
+    # 协议白名单
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"不支持的协议: {parsed.scheme}（仅允许 http/https）")
+
+    # host 不能为空
+    host = parsed.hostname
+    if not host:
+        raise ValueError("URL 缺少 host")
+
+    # 检查 host 是否为 IP
+    try:
+        addr = ipaddress.ip_address(host)
+        if _is_private_ip(host):
+            raise ValueError(f"不允许访问内网地址: {host}")
+        # 非内网 IP，继续
+        return
+    except ValueError:
+        # 不是标准 IP 字面量（可能是域名），继续 DNS 检查
+        pass
+
+    # 检查 host 是否为常见内网域名
+    private_hosts = {"localhost", "localhost.localdomain", "127.0.0.1.nip.io", "1.1.1.1.nip.io"}
+    if host.lower() in private_hosts:
+        raise ValueError(f"不允许访问内网域名: {host}")
+
+    try:
+        addrinfo = socket.getaddrinfo(host, 80)
+        for family, _, _, _, sockaddr in addrinfo:
+            resolved_ip = sockaddr[0]
+            if _is_private_ip(resolved_ip):
+                raise ValueError(f"域名 {host} 解析到内网地址 {resolved_ip}，已阻止")
+    except OSError as e:
+        logger.warning(f"DNS 解析失败 {host}: {e}")
+        # DNS 解析失败不应阻塞（可能 URL 本身可达但 DNS 临时故障），继续
+        # 但如果解析彻底失败，requests 也会报错
 
 
 def is_question(text: str) -> bool:
@@ -53,6 +118,7 @@ def extract_question_text(text: str) -> str:
 
 def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
     """抓取掘金文章"""
+    validate_url(url)
     try:
         resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.raise_for_status()
@@ -124,6 +190,7 @@ def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
 
 def scrape_generic_page(url: str, category: str = "面试") -> list[Question]:
     """通用网页抓取"""
+    validate_url(url)
     try:
         resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.raise_for_status()

@@ -3,13 +3,12 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
-const API_BASE = ''  // 空字符串 → 相对路径，走 Next.js rewrites 代理
-const TOKEN_KEY = 'admin_token'
+const API_BASE = ''
 
 interface AdminAuthState {
   isLoggedIn: boolean
   isLoading: boolean
-  token: string | null
+  token: string | null  // 保留字段供 adminHeaders() 向后兼容，实际 token 在 httpOnly cookie 中
   login: (password: string) => Promise<boolean>
   logout: () => void
 }
@@ -20,11 +19,19 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  // 从 localStorage 恢复
+  // 启动时通过 /api/auth/me 检查 httpOnly cookie 是否有效
   useEffect(() => {
-    const saved = localStorage.getItem(TOKEN_KEY)
-    if (saved) setToken(saved)
-    setIsLoading(false)
+    fetch(`${API_BASE}/api/auth/me`, { credentials: 'include' })
+      .then(res => {
+        if (res.ok) {
+          // cookie 有效 — token 在 httpOnly cookie 里，前端无需存储
+          setToken('cookie-authenticated')
+        } else {
+          setToken(null)
+        }
+      })
+      .catch(() => setToken(null))
+      .finally(() => setIsLoading(false))
   }, [])
 
   const login = useCallback(async (password: string): Promise<boolean> => {
@@ -33,19 +40,25 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password }),
+        credentials: 'include',  // 接收 Set-Cookie
       })
       if (!res.ok) return false
-      const data = await res.json()
-      localStorage.setItem(TOKEN_KEY, data.access_token)
-      setToken(data.access_token)
+      setToken('cookie-authenticated')
       return true
     } catch {
       return false
     }
   }, [])
 
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API_BASE}/api/auth/logout`, {
+        method: 'POST',
+        credentials: 'include',  // 让 Set-Cookie 清除 cookie
+      })
+    } catch {
+      // 即使后端不可达也清除前端状态
+    }
     setToken(null)
   }, [])
 
