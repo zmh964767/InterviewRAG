@@ -44,6 +44,12 @@ backend/coverage.xml
 frontend/coverage/
 htmlcov/
 
+# Eval 生成 / 中间产物（不提交）
+backend/evaluation/eval_dataset_generated*.json
+backend/evaluation/eval_dataset_backup*.json
+backend/evaluation/_checkpoint*.json
+backend/evaluation/_ragas_checkpoint*.json
+
 # Sweep 调优结果（本地实验产物，不公开）
 backend/evaluation/results/sweep/
 
