@@ -62,6 +62,42 @@ class TestAuthEndpoint:
         res = client.post("/api/auth/login", json={"password": "wrong"})
         assert res.status_code == 401
 
+    def test_login_returns_503_when_password_not_configured(self, client, monkeypatch):
+        """AC-2: ADMIN_PASSWORD 未设时 login 返回 503 而非 401/200"""
+        from app.api import auth as auth_mod
+
+        # 直接 patch get_current_password 返回空（避免 Settings lru_cache 时序问题）
+        monkeypatch.setattr(auth_mod, "get_current_password", lambda: "")
+
+        res = client.post("/api/auth/login", json={"password": "anything"})
+
+        assert res.status_code == 503
+        assert "未配置" in res.json().get("detail", "") or "ADMIN_PASSWORD" in res.json().get("detail", "")
+
+    def test_login_cookie_secure_flag_from_settings(self, client, monkeypatch):
+        """AC: cookie_secure 配置生效（dev=False / 生产=True）"""
+        from app.config import get_settings
+
+        # dev 默认：cookie Secure flag 不应出现
+        get_settings.cache_clear()
+        res = client.post("/api/auth/login", json={"password": "admin123"})
+        assert res.status_code == 200
+        set_cookie = res.headers.get("set-cookie", "")
+        assert "admin_token=" in set_cookie
+        assert "Secure" not in set_cookie  # dev 环境不应有 Secure flag
+
+        # 切到生产模式：Secure flag 必须出现
+        monkeypatch.setenv("COOKIE_SECURE", "true")
+        get_settings.cache_clear()
+        res2 = client.post("/api/auth/login", json={"password": "admin123"})
+        assert res2.status_code == 200
+        set_cookie2 = res2.headers.get("set-cookie", "")
+        assert "Secure" in set_cookie2
+
+        # 还原
+        monkeypatch.delenv("COOKIE_SECURE", raising=False)
+        get_settings.cache_clear()
+
     def test_protected_route_with_valid_token(self, client, admin_headers):
         res = client.get("/api/admin/stats", headers=admin_headers)
         assert res.status_code == 200

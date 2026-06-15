@@ -8,7 +8,6 @@ import ipaddress
 import logging
 import re
 import socket
-import time
 from urllib.parse import urlparse
 
 import requests
@@ -90,9 +89,11 @@ def validate_url(url: str) -> None:
             if _is_private_ip(resolved_ip):
                 raise ValueError(f"域名 {host} 解析到内网地址 {resolved_ip}，已阻止")
     except OSError as e:
-        logger.warning(f"DNS 解析失败 {host}: {e}")
-        # DNS 解析失败不应阻塞（可能 URL 本身可达但 DNS 临时故障），继续
-        # 但如果解析彻底失败，requests 也会报错
+        # DNS 解析失败默认拒绝（SSRF 反模式：攻击者可让权威 DNS 返回 SERVFAIL/NXDOMAIN
+        # 绕过校验，所以失败要 fail-closed）。如果实际 URL 可达但 DNS 临时抖动，
+        # 会在这里报错由上层 try/except 接住。
+        logger.warning(f"DNS 解析失败 {host}，默认拒绝: {e}")
+        raise ValueError(f"域名 {host} DNS 解析失败，无法确认目标安全性")
 
 
 def is_question(text: str) -> bool:

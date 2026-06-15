@@ -72,6 +72,8 @@ class Settings(BaseSettings):
     jwt_secret_key: str = ""  # 空值时由 app.auth 模块启动时自动生成
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440  # 24 小时
+    # Cookie secure 标志：dev http 设为 False，部署到 https 时必须设 True
+    cookie_secure: bool = False
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

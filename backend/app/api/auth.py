@@ -109,7 +109,7 @@ async def login(request: LoginRequest):
         httponly=True,
         samesite="lax",
         max_age=get_settings().jwt_expire_minutes * 60,
-        secure=False,  # dev 模式用 http; 生产部署时建议设为 True（需 https）
+        secure=get_settings().cookie_secure,  # dev=False (http) / 生产必须 True (https)
         path="/",
     )
     return response
