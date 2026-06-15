@@ -1,21 +1,16 @@
 """PDF 面试题解析器"""
 
-import hashlib
+import io
 import logging
 import re
 from pathlib import Path
 
+from pypdf import PdfReader
+
 from app.models.schemas import Question
+from app.parsers.common import build_question, extract_question_text, is_question
 
 logger = logging.getLogger(__name__)
-
-# 题目识别模式
-QUESTION_PATTERNS = [
-    re.compile(r"^[\d]+[.、]\s*(.+)"),
-    re.compile(r"^Q[\d]*[：:]\s*(.+)"),
-    re.compile(r"^问题[\d]*[：:]\s*(.+)"),
-    re.compile(r"^(什么是|请解释|请介绍|如何|为什么|谈谈).+?[？?]?$"),
-]
 
 CHAPTER_PATTERNS = [
     re.compile(r"^(?:第[一二三四五六七八九十\d]+章|Chapter\s+\d+|Part\s+\d+)[：:\s]*(.+)"),
@@ -30,35 +25,10 @@ def _infer_category_from_filename(filename: str) -> str:
     return name.strip() or "PDF面试题"
 
 
-def is_question(text: str) -> bool:
-    """判断文本是否是题目"""
-    text = text.strip()
-    if len(text) < 10 or len(text) > 200:
-        return False
-    for pattern in QUESTION_PATTERNS:
-        if pattern.search(text):
-            return True
-    return False
-
-
-def extract_question_text(text: str) -> str:
-    """提取题目文本"""
-    text = text.strip()
-    for pattern in QUESTION_PATTERNS:
-        match = pattern.match(text)
-        if match and match.lastindex:
-            return match.group(1).strip()
-    return text
-
-
 def parse_pdf(file_path: str, category: str | None = None) -> list[Question]:
     """解析 PDF 文件"""
     if category is None:
         category = _infer_category_from_filename(file_path)
-    try:
-        from pypdf import PdfReader
-    except ImportError:
-        from PyPDF2 import PdfReader
 
     try:
         reader = PdfReader(file_path)
@@ -84,12 +54,6 @@ def parse_pdf_content(content: bytes, filename: str, category: str | None = None
     """解析 PDF 内容（字节流）"""
     if category is None:
         category = _infer_category_from_filename(filename)
-    try:
-        from pypdf import PdfReader
-        import io
-    except ImportError:
-        from PyPDF2 import PdfReader
-        import io
 
     try:
         reader = PdfReader(io.BytesIO(content))
@@ -133,20 +97,14 @@ def parse_text_content(text: str, source: str, category: str) -> list[Question]:
         if is_question(line):
             # 保存上一题
             if current_question and current_answer_lines:
-                q_text = extract_question_text(current_question)
-                a_text = "\n".join(current_answer_lines).strip()
-                if q_text and a_text:
-                    questions.append(
-                        Question(
-                            id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
-                            question=q_text,
-                            answer=a_text,
-                            category=current_category,
-                            difficulty="中等",
-                            source=source,
-                            tags=[current_category],
-                        )
-                    )
+                q = build_question(
+                    extract_question_text(current_question),
+                    "\n".join(current_answer_lines),
+                    current_category,
+                    source,
+                )
+                if q:
+                    questions.append(q)
 
             current_question = line
             current_answer_lines = []
@@ -155,20 +113,14 @@ def parse_text_content(text: str, source: str, category: str) -> list[Question]:
 
     # 保存最后一题
     if current_question and current_answer_lines:
-        q_text = extract_question_text(current_question)
-        a_text = "\n".join(current_answer_lines).strip()
-        if q_text and a_text:
-            questions.append(
-                Question(
-                    id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
-                    question=q_text,
-                    answer=a_text,
-                    category=current_category,
-                    difficulty="中等",
-                    source=source,
-                    tags=[current_category],
-                )
-            )
+        q = build_question(
+            extract_question_text(current_question),
+            "\n".join(current_answer_lines),
+            current_category,
+            source,
+        )
+        if q:
+            questions.append(q)
 
     logger.info(f"从 PDF 解析 {len(questions)} 道题目")
     return questions

@@ -3,10 +3,8 @@
 支持从掘金、CSDN 等平台抓取面试文章，提取结构化题目。
 """
 
-import hashlib
 import ipaddress
 import logging
-import re
 import socket
 from urllib.parse import urlparse
 
@@ -14,6 +12,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from app.models.schemas import Question
+from app.parsers.common import build_question, extract_question_text, is_question
 
 logger = logging.getLogger(__name__)
 
@@ -25,14 +24,6 @@ HEADERS = {
 
 # 禁止的协议
 BLOCKED_SCHEMES = {"file", "ftp", "gopher", "dict", "ldap"}
-
-# 题目识别模式
-QUESTION_PATTERNS = [
-    re.compile(r"^[\d]+[.、]\s*(.+)"),  # 1. xxx 或 1、xxx
-    re.compile(r"^Q[\d]*[：:]\s*(.+)"),  # Q1: xxx
-    re.compile(r"^问题[\d]*[：:]\s*(.+)"),  # 问题1: xxx
-    re.compile(r"^(什么是|请解释|请介绍|如何|为什么|谈谈).+?[？?]?$"),  # 问答句式
-]
 
 
 def _is_private_ip(ip_str: str) -> bool:
@@ -96,27 +87,6 @@ def validate_url(url: str) -> None:
         raise ValueError(f"域名 {host} DNS 解析失败，无法确认目标安全性")
 
 
-def is_question(text: str) -> bool:
-    """判断文本是否是题目"""
-    text = text.strip()
-    if len(text) < 10 or len(text) > 200:
-        return False
-    for pattern in QUESTION_PATTERNS:
-        if pattern.search(text):
-            return True
-    return False
-
-
-def extract_question_text(text: str) -> str:
-    """提取题目文本（去掉编号等）"""
-    text = text.strip()
-    for pattern in QUESTION_PATTERNS:
-        match = pattern.match(text)
-        if match and match.lastindex:
-            return match.group(1).strip()
-    return text
-
-
 def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
     """抓取掘金文章"""
     validate_url(url)
@@ -147,20 +117,14 @@ def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
         if is_question(text):
             # 保存上一题
             if current_question and current_answer_lines:
-                q_text = extract_question_text(current_question)
-                a_text = "\n".join(current_answer_lines).strip()
-                if q_text and a_text:
-                    questions.append(
-                        Question(
-                            id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
-                            question=q_text,
-                            answer=a_text,
-                            category=category,
-                            difficulty="中等",
-                            source=url,
-                            tags=[category],
-                        )
-                    )
+                q = build_question(
+                    extract_question_text(current_question),
+                    "\n".join(current_answer_lines),
+                    category,
+                    url,
+                )
+                if q:
+                    questions.append(q)
 
             current_question = text
             current_answer_lines = []
@@ -170,20 +134,14 @@ def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
 
     # 保存最后一题
     if current_question and current_answer_lines:
-        q_text = extract_question_text(current_question)
-        a_text = "\n".join(current_answer_lines).strip()
-        if q_text and a_text:
-            questions.append(
-                Question(
-                    id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
-                    question=q_text,
-                    answer=a_text,
-                    category=category,
-                    difficulty="中等",
-                    source=url,
-                    tags=[category],
-                )
-            )
+        q = build_question(
+            extract_question_text(current_question),
+            "\n".join(current_answer_lines),
+            category,
+            url,
+        )
+        if q:
+            questions.append(q)
 
     logger.info(f"从 {url} 抓取 {len(questions)} 道题目")
     return questions
@@ -215,20 +173,14 @@ def scrape_generic_page(url: str, category: str = "面试") -> list[Question]:
     for line in lines:
         if is_question(line):
             if current_question and current_answer_lines:
-                q_text = extract_question_text(current_question)
-                a_text = "\n".join(current_answer_lines).strip()
-                if q_text and a_text:
-                    questions.append(
-                        Question(
-                            id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
-                            question=q_text,
-                            answer=a_text,
-                            category=category,
-                            difficulty="中等",
-                            source=url,
-                            tags=[category],
-                        )
-                    )
+                q = build_question(
+                    extract_question_text(current_question),
+                    "\n".join(current_answer_lines),
+                    category,
+                    url,
+                )
+                if q:
+                    questions.append(q)
 
             current_question = line
             current_answer_lines = []
@@ -237,20 +189,14 @@ def scrape_generic_page(url: str, category: str = "面试") -> list[Question]:
 
     # 保存最后一题
     if current_question and current_answer_lines:
-        q_text = extract_question_text(current_question)
-        a_text = "\n".join(current_answer_lines).strip()
-        if q_text and a_text:
-            questions.append(
-                Question(
-                    id=hashlib.md5(f"{q_text}|{a_text}".encode()).hexdigest()[:12],
-                    question=q_text,
-                    answer=a_text,
-                    category=category,
-                    difficulty="中等",
-                    source=url,
-                    tags=[category],
-                )
-            )
+        q = build_question(
+            extract_question_text(current_question),
+            "\n".join(current_answer_lines),
+            category,
+            url,
+        )
+        if q:
+            questions.append(q)
 
     logger.info(f"从 {url} 抓取 {len(questions)} 道题目")
     return questions

@@ -1,24 +1,36 @@
 """Markdown 面试题解析器
 
-解析格式：
+解析格式（支持带/不带 <strong> 标签）：
 ### <strong>1. 章节标题</strong>
+### 1. 章节标题
 #### <strong>1.1 题目内容</strong>
+#### 1.1 题目内容
 * <strong>参考答案：</strong>
+* 参考答案：
     答案内容...
 """
 
-import re
 import hashlib
 import logging
+import re
 from pathlib import Path
 
 from app.models.schemas import Question
 
 logger = logging.getLogger(__name__)
 
+# =====================================================================
+# 正则模式（主模式 + fallback）
+# =====================================================================
+
 # 章节标题正则（只匹配 ### 不匹配 ####）
 CHAPTER_PATTERN = re.compile(
     r"^###\s+<strong>\s*(\d+)\.\s*(.+?)\s*</strong>",
+    re.IGNORECASE,
+)
+# fallback: 无 <strong> 标签
+CHAPTER_PATTERN_FALLBACK = re.compile(
+    r"^###\s+(\d+)\.\s+(.+)",
     re.IGNORECASE,
 )
 
@@ -27,10 +39,20 @@ QUESTION_PATTERN = re.compile(
     r"^####\s+<strong>\s*(\d+\.\d+)\s*(.+?)\s*</strong>",
     re.IGNORECASE,
 )
+# fallback: 无 <strong> 标签
+QUESTION_PATTERN_FALLBACK = re.compile(
+    r"^####\s+(\d+\.\d+)\s+(.+)",
+    re.IGNORECASE,
+)
 
 # 答案标记
 ANSWER_MARKER = re.compile(
     r"\*\s*<strong>\s*参考答案[：:]\s*</strong>",
+    re.IGNORECASE,
+)
+# fallback: 无 <strong> 标签
+ANSWER_MARKER_FALLBACK = re.compile(
+    r"^\*\s*参考答案[：:]",
     re.IGNORECASE,
 )
 
@@ -41,6 +63,11 @@ LATEX_PATTERN = re.compile(r"\$[^$]+\$|\\[a-zA-Z]+")
 # 多余空白
 MULTI_SPACE = re.compile(r"\s+")
 MULTI_NEWLINE = re.compile(r"\n{3,}")
+
+
+# =====================================================================
+# 工具函数
+# =====================================================================
 
 
 def clean_html(text: str) -> str:
@@ -56,6 +83,40 @@ def generate_id(chapter: str, question_num: str) -> str:
     """生成唯一 ID"""
     content = f"{chapter}|{question_num}"
     return hashlib.md5(content.encode()).hexdigest()[:12]
+
+
+def _try_match_chapter(line: str) -> re.Match | None:
+    """尝试匹配章节标题（主模式优先，fallback 其次）"""
+    m = CHAPTER_PATTERN.search(line)
+    if m:
+        return m
+    return CHAPTER_PATTERN_FALLBACK.search(line)
+
+
+def _try_match_question(line: str) -> re.Match | None:
+    """尝试匹配题目标题（主模式优先，fallback 其次）"""
+    m = QUESTION_PATTERN.search(line)
+    if m:
+        return m
+    return QUESTION_PATTERN_FALLBACK.search(line)
+
+
+def _is_answer_marker(line: str) -> bool:
+    """检测答案标记（主模式优先，fallback 其次）"""
+    return bool(ANSWER_MARKER.search(line) or ANSWER_MARKER_FALLBACK.search(line))
+
+
+def _strip_answer_marker(line: str) -> str:
+    """去掉答案标记，返回剩余文本"""
+    stripped = ANSWER_MARKER.sub("", line).strip()
+    if stripped != line.strip():
+        return stripped
+    return ANSWER_MARKER_FALLBACK.sub("", line).strip()
+
+
+# =====================================================================
+# 解析入口
+# =====================================================================
 
 
 def parse_md_file(file_path: str) -> list[Question]:
@@ -74,6 +135,7 @@ def parse_md_content(content: str, source: str = "unknown") -> list[Question]:
     questions: list[Question] = []
     current_chapter = ""
     current_chapter_name = ""
+    total_matched = 0
 
     lines = content.split("\n")
     i = 0
@@ -82,7 +144,7 @@ def parse_md_content(content: str, source: str = "unknown") -> list[Question]:
         line = lines[i].strip()
 
         # 匹配章节
-        chapter_match = CHAPTER_PATTERN.search(line)
+        chapter_match = _try_match_chapter(line)
         if chapter_match:
             current_chapter = chapter_match.group(1)
             current_chapter_name = clean_html(chapter_match.group(2))
@@ -90,8 +152,9 @@ def parse_md_content(content: str, source: str = "unknown") -> list[Question]:
             continue
 
         # 匹配题目
-        question_match = QUESTION_PATTERN.search(line)
+        question_match = _try_match_question(line)
         if question_match:
+            total_matched += 1
             question_num = question_match.group(1)
             question_text = clean_html(question_match.group(2))
 
@@ -104,7 +167,7 @@ def parse_md_content(content: str, source: str = "unknown") -> list[Question]:
                 next_line = lines[i].strip()
 
                 # 遇到下一题目或章节，停止
-                if QUESTION_PATTERN.search(next_line) or CHAPTER_PATTERN.search(next_line):
+                if _try_match_question(next_line) or _try_match_chapter(next_line):
                     break
 
                 # 遇到分隔线，停止
@@ -113,10 +176,10 @@ def parse_md_content(content: str, source: str = "unknown") -> list[Question]:
                     break
 
                 # 检测答案标记
-                if ANSWER_MARKER.search(next_line):
+                if _is_answer_marker(next_line):
                     in_answer = True
                     # 答案标记后的同一行内容
-                    after_marker = ANSWER_MARKER.sub("", next_line).strip()
+                    after_marker = _strip_answer_marker(next_line)
                     if after_marker:
                         answer_lines.append(after_marker)
                     i += 1
@@ -152,32 +215,8 @@ def parse_md_content(content: str, source: str = "unknown") -> list[Question]:
 
         i += 1
 
+    if total_matched == 0 and content.strip():
+        logger.warning("MD 内容未匹配到任何题目，请检查格式是否兼容（需要 ### 章节 + #### 题目）")
+
     logger.info(f"共解析 {len(questions)} 道题目")
     return questions
-
-
-def save_to_json(questions: list[Question], output_path: str):
-    """保存为 JSON 文件"""
-    import json
-
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    data = [q.model_dump(mode="json") for q in questions]
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    logger.info(f"已保存 {len(questions)} 道题目到 {output_path}")
-
-
-if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) < 3:
-        print("用法: python -m app.parsers.md_parser <input.md> <output.json>")
-        sys.exit(1)
-
-    input_file = sys.argv[1]
-    output_file = sys.argv[2]
-
-    questions = parse_md_file(input_file)
-    save_to_json(questions, output_file)
-    print(f"解析完成: {len(questions)} 道题目")

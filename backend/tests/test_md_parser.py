@@ -78,6 +78,45 @@ class TestParseMdContent:
         assert any("VLM" in c for c in categories)
 
 
+class TestFallbackRegex:
+    """无 <strong> 标签的 fallback 正则"""
+
+    def test_plain_chapter_and_question(self):
+        md = """### 1. LLM 基础
+
+#### 1.1 什么是 Transformer？
+
+* 参考答案：Transformer 是一种模型架构。
+
+---
+
+#### 1.2 什么是位置编码？
+
+* 参考答案：位置编码用于注入位置信息。
+"""
+        result = parse_md_content(md)
+        assert len(result) == 2
+        assert "Transformer" in result[0].question
+        assert result[0].answer  # 非空
+
+    def test_plain_answer_marker(self):
+        md = """### 1. 测试
+
+#### 1.1 第一题？
+
+* 参考答案：这是答案。
+"""
+        result = parse_md_content(md)
+        assert len(result) == 1
+        assert "这是答案" in result[0].answer
+
+    def test_no_match_warning(self, caplog):
+        import logging
+        with caplog.at_level(logging.WARNING):
+            parse_md_content("some random text without any structure")
+        assert any("未匹配到任何题目" in r.message for r in caplog.records)
+
+
 class TestCleanHtml:
     """clean_html 函数"""
 
