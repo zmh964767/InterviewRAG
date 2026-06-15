@@ -8,7 +8,7 @@ import { QuestionTable } from '@/components/kb/QuestionTable'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { Skeleton } from '@/components/ui/Skeleton'
-import { useChatContext } from '@/contexts/ChatContext'
+import { useChatConversationsContext } from '@/contexts/ChatContext'
 import { listQuestions } from '@/lib/api'
 import { QUESTIONS } from '@/lib/copy'
 import type { Question, QuestionListResponse } from '@/lib/types'
@@ -31,7 +31,7 @@ export default function QuestionsPage() {
   const [selected, setSelected] = useState<Question | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(true)
 
-  const { conversations, currentId, createConversation, switchConversation, deleteConversation } = useChatContext()
+  const { conversations, currentId, createConversation, switchConversation, deleteConversation } = useChatConversationsContext()
 
   // 搜索 debounce
   useEffect(() => {

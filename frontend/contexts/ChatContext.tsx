@@ -10,13 +10,19 @@ import {
   useEffect,
   useMemo,
 } from 'react'
-import type { ReactNode } from 'react'
+import type { Dispatch, ReactNode } from 'react'
 import { queryStream } from '@/lib/api'
 import type { Message, SourceRef } from '@/lib/types'
 
 // =====================================================================
 // ChatContext: 统一 chat 状态管理
-// 包含 conversations state + 流式 partial + localStorage 持久化（单点写入）
+// 拆分为两个 Context 以减少高频流式期间的非必要重渲染：
+//   - ChatConversationsContext: 会话列表 + CRUD 回调
+//   - ChatStreamingContext: 流式状态 + sendMessage/abort/...
+// 通过 useChatContext 组合订阅（向后兼容）。
+//
+// 跨 Provider 共享的 mutable 状态（abortRef / streamingConvIdRef）保留在
+// ChatProvider 顶层,通过 props 下传，避免 Provider 之间互传回调。
 // =====================================================================
 
 const STORAGE_KEY = 'interviewrag_conversations'
@@ -45,7 +51,22 @@ export interface ChatError {
   message: string
 }
 
-export interface ChatContextValue {
+export interface ChatConversationsContextValue {
+  // 派生
+  conversations: Conversation[]
+  currentId: string | null
+  currentConversation: Conversation | null
+  currentMessages: Message[]
+
+  // CRUD
+  createConversation: () => string
+  switchConversation: (id: string) => void
+  deleteConversation: (id: string) => void
+  updateMessages: (msgs: Message[]) => void
+  renameConversation: (id: string, title: string) => void
+}
+
+export interface ChatStreamingContextValue {
   // 流式状态
   isLoading: boolean
   streamingConvId: string | null
@@ -57,20 +78,16 @@ export interface ChatContextValue {
   abort: () => void
   continueLast: () => Promise<void>
   clearError: (messageId?: string) => void
-
-  // 对话管理
-  conversations: Conversation[]
-  currentId: string | null
-  currentConversation: Conversation | null
-  currentMessages: Message[]
-  createConversation: () => string
-  switchConversation: (id: string) => void
-  deleteConversation: (id: string) => void
-  updateMessages: (msgs: Message[]) => void
-  renameConversation: (id: string, title: string) => void
 }
 
-const ChatContext = createContext<ChatContextValue | null>(null)
+// 向后兼容：完整接口 = 两个子 context 的并集
+export type ChatContextValue = ChatConversationsContextValue & ChatStreamingContextValue
+
+const ChatConversationsContext = createContext<ChatConversationsContextValue | null>(null)
+const ChatStreamingContext = createContext<ChatStreamingContextValue | null>(null)
+
+// 兼容旧引用
+const ChatContext = ChatConversationsContext
 
 type ConvAction =
   | { type: 'LOAD'; payload: Conversation[] }
@@ -132,10 +149,25 @@ function convReducer(state: Conversation[], action: ConvAction): Conversation[] 
   }
 }
 
-export function useChatContext(): ChatContextValue {
-  const ctx = useContext(ChatContext)
-  if (!ctx) throw new Error('useChatContext must be used within ChatProvider')
+// ---------- hooks ----------
+
+export function useChatConversationsContext(): ChatConversationsContextValue {
+  const ctx = useContext(ChatConversationsContext)
+  if (!ctx) throw new Error('useChatConversationsContext must be used within ChatProvider')
   return ctx
+}
+
+export function useChatStreamingContext(): ChatStreamingContextValue {
+  const ctx = useContext(ChatStreamingContext)
+  if (!ctx) throw new Error('useChatStreamingContext must be used within ChatProvider')
+  return ctx
+}
+
+// 向后兼容：组合两个 context
+export function useChatContext(): ChatContextValue {
+  const conv = useChatConversationsContext()
+  const stream = useChatStreamingContext()
+  return { ...conv, ...stream }
 }
 
 // ---------- helpers ----------
@@ -184,16 +216,153 @@ function createEmptyConversation(): Conversation {
   }
 }
 
+function createEmptyConversationWithId(id: string): Conversation {
+  return {
+    id,
+    title: '新对话',
+    messages: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+}
+
 // =====================================================================
-// ChatProvider
+// Inner Provider 共享 props：reducer state + 顶层 refs
+// 顶层持有 abortRef / streamingConvIdRef（跨 Provider mutable 状态）
 // =====================================================================
 
-export function ChatProvider({ children }: { children: ReactNode }) {
-  // ---- conversations state ----
-  const [conversations, dispatch] = useReducer(convReducer, [])
-  const conversationsRef = useRef<Conversation[]>([])
-  conversationsRef.current = conversations
-  const [currentId, setCurrentId] = useState<string | null>(null)
+interface SharedChatState {
+  conversations: Conversation[]
+  dispatch: Dispatch<ConvAction>
+  currentId: string | null
+  setCurrentId: (id: string | null) => void
+  conversationsRef: React.MutableRefObject<Conversation[]>
+  currentIdRef: React.MutableRefObject<string | null>
+  justCreatedIdRef: React.MutableRefObject<string | null>
+  abortRef: React.MutableRefObject<AbortController | null>
+  streamingConvIdRef: React.MutableRefObject<string | null>
+}
+
+// ---------------------------------------------------------------------
+// InnerConversationsProvider
+// ---------------------------------------------------------------------
+
+function InnerConversationsProvider({
+  state,
+  children,
+}: {
+  state: SharedChatState
+  children: ReactNode
+}) {
+  const {
+    conversations,
+    dispatch,
+    currentId,
+    setCurrentId,
+    conversationsRef,
+    currentIdRef,
+    justCreatedIdRef,
+    abortRef,
+    streamingConvIdRef,
+  } = state
+
+  const createConversation = useCallback((): string => {
+    const newConv = createEmptyConversation()
+    dispatch({ type: 'CREATE', payload: newConv })
+    setCurrentId(newConv.id)
+    justCreatedIdRef.current = newConv.id
+    return newConv.id
+  }, [dispatch, setCurrentId, justCreatedIdRef])
+
+  const switchConversation = useCallback((id: string) => {
+    setCurrentId(id)
+  }, [setCurrentId])
+
+  const deleteConversation = useCallback((id: string) => {
+    // 删的是当前正在流的对话,先 abort
+    if (streamingConvIdRef.current === id && abortRef.current) {
+      abortRef.current.abort()
+    }
+    const remaining = conversationsRef.current.filter(c => c.id !== id)
+    dispatch({ type: 'DELETE', payload: { id } })
+    if (remaining.length === 0) {
+      const newConv = createEmptyConversation()
+      dispatch({ type: 'CREATE', payload: newConv })
+      setCurrentId(newConv.id)
+      justCreatedIdRef.current = newConv.id
+    } else if (currentIdRef.current === id) {
+      setCurrentId(remaining[0].id)
+    }
+  }, [dispatch, setCurrentId, conversationsRef, currentIdRef, justCreatedIdRef, abortRef, streamingConvIdRef])
+
+  const updateMessages = useCallback((msgs: Message[]) => {
+    const targetId = currentIdRef.current
+    if (!targetId) return
+    const conv = conversationsRef.current.find(c => c.id === targetId)
+    const title = conv?.title === '新对话' ? getTitleFromMessages(msgs) : undefined
+    dispatch({ type: 'UPDATE_MESSAGES', payload: { convId: targetId, messages: msgs, title } })
+  }, [dispatch, conversationsRef, currentIdRef])
+
+  const renameConversation = useCallback((id: string, title: string) => {
+    dispatch({ type: 'RENAME', payload: { id, title } })
+  }, [dispatch])
+
+  const currentConversation = useMemo(
+    () => conversations.find((c) => c.id === currentId) ?? null,
+    [conversations, currentId],
+  )
+  const currentMessages = useMemo(
+    () => currentConversation?.messages ?? [],
+    [currentConversation],
+  )
+
+  const value = useMemo<ChatConversationsContextValue>(
+    () => ({
+      conversations,
+      currentId,
+      currentConversation,
+      currentMessages,
+      createConversation,
+      switchConversation,
+      deleteConversation,
+      updateMessages,
+      renameConversation,
+    }),
+    [
+      conversations,
+      currentId,
+      currentConversation,
+      currentMessages,
+      createConversation,
+      switchConversation,
+      deleteConversation,
+      updateMessages,
+      renameConversation,
+    ],
+  )
+
+  return <ChatConversationsContext.Provider value={value}>{children}</ChatConversationsContext.Provider>
+}
+
+// ---------------------------------------------------------------------
+// InnerStreamingProvider
+// ---------------------------------------------------------------------
+
+function InnerStreamingProvider({
+  state,
+  children,
+}: {
+  state: SharedChatState
+  children: ReactNode
+}) {
+  const {
+    conversations,
+    dispatch,
+    conversationsRef,
+    currentIdRef,
+    justCreatedIdRef,
+    abortRef,
+  } = state
 
   // ---- streaming state ----
   const [isLoading, setIsLoading] = useState(false)
@@ -201,54 +370,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [partial, setPartial] = useState<StreamPartial | null>(null)
   const [lastError, setLastError] = useState<ChatError | null>(null)
 
-  // ---- refs ----
-  const abortRef = useRef<AbortController | null>(null)
-  // 用户主动中止标记：手动点停止时置 true，
-  // sendMessage 的 finally 据此决定是否显示 InlineErrorBanner。
-  // 手动点停止 = 显示"重新生成"banner（用户留在当前对话，想重试）。
-  // 切会话 = 不触发 abort（旧流后台继续生成）。
+  // ---- 局部 refs ----
   const userStopRef = useRef(false)
   const partialRef = useRef<StreamPartial | null>(null)
-  const currentIdRef = useRef<string | null>(null)
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const hasHydratedRef = useRef(false)
   const isLoadingRef = useRef(false)
-  // 跟踪刚刚 createConversation() 创建的 id：sendMessage 看到此 ref 就知道
-  // 不需要再 dispatch CREATE，避免 React dispatch 异步导致的双 CREATE bug。
-  const justCreatedIdRef = useRef<string | null>(null)
   isLoadingRef.current = isLoading
-
   partialRef.current = partial
-  currentIdRef.current = currentId
-
-  // ---- 加载 localStorage（仅一次） ----
-  useEffect(() => {
-    const loaded = loadConversations()
-    dispatch({ type: 'LOAD', payload: loaded })
-    setCurrentId(loadActiveId(loaded))
-    hasHydratedRef.current = true
-  }, [])
-
-  // ---- 持久化：单一写入点，debounce 100ms ----
-  useEffect(() => {
-    if (!hasHydratedRef.current) return
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    saveTimerRef.current = setTimeout(() => {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
-        if (currentId) {
-          localStorage.setItem(ACTIVE_KEY, currentId)
-        }
-      } catch {
-        // localStorage full or unavailable
-      }
-    }, SAVE_DEBOUNCE_MS)
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
-    }
-  }, [conversations, currentId])
-
-  // ---- 流式控制 ----
+  // streamingConvId 同步到顶层 ref (供 deleteConversation 判断)
+  state.streamingConvIdRef.current = streamingConvId
 
   const sendMessage = useCallback(
     async (content: string, conversationId: string, options?: { existingAiMsgId?: string; skipUser?: boolean }) => {
@@ -258,17 +387,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       const aiMsgId = existingAiMsgId ?? (Date.now() + 1).toString()
 
-      // existingAiMsgId 路径：continueLast 已清空 ai 消息，sendMessage 复用同一条消息
-      // skipUser=true 时不追加 user 消息（continueLast 场景已有 user 消息）
-      // fullContent 从空开始，新流的 token 直接写入
       let existingContent = ''
 
       if (existingAiMsgId) {
-        // continueLast: 不清空 ai 消息（保留已有 partial），不追加 user 消息
-        // 新流的 token 会追加到 existingContent 后面
         if (skipUser) {
-          // continueLast: 不追加 user 消息，不修改已有 ai 消息
-          // 调用方（continueLast）已清空 ai 消息内容，此处 existingContent 从空开始
           existingContent = ''
           dispatch({ type: 'TOUCH', payload: { id: conversationId } })
         } else {
@@ -287,7 +409,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           }
         }
       } else {
-        // 正常发送：创建新的 user + ai 消息对
         const userMsg: Message = {
           id: Date.now().toString(),
           role: 'user',
@@ -304,14 +425,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           conversationId,
         }
         const existingConv = conversationsRef.current.find(c => c.id === conversationId)
-        // ★ 用 justCreatedIdRef 判断"刚刚在 createConversation() 创建过"。
-        //   不用 conversationsRef.current.find（因为 dispatch 异步、ref 还没刷新），
-        //   否则会再 dispatch 一次 CREATE，导致侧边栏出现两条相同 id 的会话。
         if (!existingConv && justCreatedIdRef.current !== conversationId) {
           dispatch({ type: 'CREATE', payload: createEmptyConversationWithId(conversationId) })
         }
         const isFirstUser = !existingConv || existingConv.messages.length === 0
-        // 同一会话复用：消费完 ref，避免下一轮误判
         if (justCreatedIdRef.current === conversationId) {
           justCreatedIdRef.current = null
         }
@@ -321,7 +438,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         })
       }
 
-      // 3: 触发 partial（continue 时从已有内容开始）
       const initial: StreamPartial = {
         convId: conversationId,
         aiMsgId,
@@ -342,7 +458,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       let sources: SourceRef[] = []
 
       try {
-        // 传入最近 20 条消息（10 轮 = 后端 memory_window * 2），让 LLM 知道上下文
         const conv = conversationsRef.current.find(c => c.id === conversationId)
         const history = conv?.messages?.slice(-20) || []
         for await (const event of queryStream(
@@ -351,7 +466,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           history,
           controller.signal,
         )) {
-          // 中断检查：用局部 controller，不读 ref（ref 可能已被下一轮 sendMessage 覆盖）。
           if (controller.signal.aborted) {
             if (userStopRef.current) {
               setLastError({ kind: 'aborted', messageId: aiMsgId, message: '' })
@@ -402,29 +516,21 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         setLastError({ kind: 'error', messageId: aiMsgId, message: errMsg })
       } finally {
         userStopRef.current = false
-        // ★ 仅当 controller 仍是当前活跃的才清状态。
-        //   若用户已切走并开始了新流，旧流的 finally 不应覆盖新流的 isLoading/streamingConvId。
         if (abortRef.current === controller) {
           setIsLoading(false)
           setStreamingConvId(null)
         }
       }
     },
-    [],
+    [dispatch, conversationsRef, justCreatedIdRef, abortRef],
   )
 
-  // ---- 流式控制:手动中止（用户点了 Stop 按钮，显示"重新生成"banner） ----
   const abort = useCallback(() => {
     userStopRef.current = true
     if (abortRef.current) {
       abortRef.current.abort()
     }
-  }, [])
-
-  // ---- 流式控制:重新生成（清空旧 partial + 用同一个 aiMsgId 重新生成） ----
-  // 后端不支持"从断点续写"，所以 continueLast = 清空已有 partial + 重新生成。
-  // 传 existingAiMsgId 让 sendMessage 更新已有 ai 消息（不创建新的消息对），
-  // 避免对话里出现重复的 user 消息。
+  }, [abortRef])
 
   const continueLast = useCallback(async () => {
     const targetConvId = currentIdRef.current
@@ -434,13 +540,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const lastAssistant = [...conv.messages].reverse().find((m) => m.role === 'assistant')
     const lastUser = [...conv.messages].reverse().find((m) => m.role === 'user')
     if (!lastUser) return
-    // 清空已有 partial 内容，用同一个 aiMsgId 重新生成（不创建重复 user 消息）
     if (lastAssistant) {
       dispatch({
         type: 'REPLACE_MESSAGE',
         payload: { convId: targetConvId, aiMsgId: lastAssistant.id, content: '', sources: [] }
       })
-      // 同步清空 partial ref（dispatch 是异步的，sendMessage 会读 partialRef/content）
       const cleared: StreamPartial = { convId: targetConvId, aiMsgId: lastAssistant.id, content: '', sources: [] }
       setPartial(cleared)
       partialRef.current = cleared
@@ -449,13 +553,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       existingAiMsgId: lastAssistant?.id,
       skipUser: true,
     })
-  }, [sendMessage])
+  }, [sendMessage, conversationsRef, currentIdRef, dispatch])
 
-  // streamingConvIdRef for deleteConversation
-  const streamingConvIdRef = useRef<string | null>(null)
-  streamingConvIdRef.current = streamingConvId
-
-  // ---- 清除错误(InlineErrorBanner 的"关闭"按钮调用) ----
   const clearError = useCallback((messageId?: string) => {
     setLastError((prev) => {
       if (!prev) return prev
@@ -464,90 +563,92 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  // ---- 对话 CRUD ----
-  const createConversation = useCallback((): string => {
-    const newConv = createEmptyConversation()
-    dispatch({ type: 'CREATE', payload: newConv })
-    setCurrentId(newConv.id)
-    justCreatedIdRef.current = newConv.id
-    return newConv.id
-  }, [])
-
-  const switchConversation = useCallback((id: string) => {
-    // 不中止当前流：让流在后台继续生成，partial 内容会通过
-    // dispatch REPLACE_MESSAGE 增量写入对应会话。切回时直接从
-    // conversations 里读取最新状态，不打断用户体验。
-    setCurrentId(id)
-  }, [])
-
-  const deleteConversation = useCallback((id: string) => {
-    // 如果删的是当前正在流的对话,先 abort
-    if (streamingConvIdRef.current === id && abortRef.current) {
-      abortRef.current.abort()
-    }
-    const remaining = conversationsRef.current.filter(c => c.id !== id)
-    dispatch({ type: 'DELETE', payload: { id } })
-    if (remaining.length === 0) {
-      // 跟 createConversation() 一样记录到 justCreatedIdRef，
-      // 避免用户删空后立刻发消息触发双 CREATE。
-      const newConv = createEmptyConversation()
-      dispatch({ type: 'CREATE', payload: newConv })
-      setCurrentId(newConv.id)
-      justCreatedIdRef.current = newConv.id
-    } else if (currentIdRef.current === id) {
-      setCurrentId(remaining[0].id)
-    }
-  }, [])
-
-  const updateMessages = useCallback((msgs: Message[]) => {
-    const targetId = currentIdRef.current
-    if (!targetId) return
-    const conv = conversationsRef.current.find(c => c.id === targetId)
-    const title = conv?.title === '新对话' ? getTitleFromMessages(msgs) : undefined
-    dispatch({ type: 'UPDATE_MESSAGES', payload: { convId: targetId, messages: msgs, title } })
-  }, [])
-
-  const renameConversation = useCallback((id: string, title: string) => {
-    dispatch({ type: 'RENAME', payload: { id, title } })
-  }, [])
-
-  // ---- 派生值 ----
-  const currentConversation = useMemo(
-    () => conversations.find((c) => c.id === currentId) ?? null,
-    [conversations, currentId],
+  const value = useMemo<ChatStreamingContextValue>(
+    () => ({
+      isLoading,
+      streamingConvId,
+      partial,
+      lastError,
+      sendMessage,
+      abort,
+      continueLast,
+      clearError,
+    }),
+    [isLoading, streamingConvId, partial, lastError, sendMessage, abort, continueLast, clearError],
   )
-  const currentMessages = currentConversation?.messages ?? []
 
-  const value: ChatContextValue = {
-    isLoading,
-    streamingConvId,
-    partial,
-    lastError,
-    sendMessage,
-    abort,
-    continueLast,
-    clearError,
-    conversations,
-    currentId,
-    currentConversation,
-    currentMessages,
-    createConversation,
-    switchConversation,
-    deleteConversation,
-    updateMessages,
-    renameConversation,
-  }
-
-  return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
+  return <ChatStreamingContext.Provider value={value}>{children}</ChatStreamingContext.Provider>
 }
 
-// 若对话不存在，用给定的 id 创建之（用于 sendMessage 中 race-safe）
-function createEmptyConversationWithId(id: string): Conversation {
-  return {
-    id,
-    title: '新对话',
-    messages: [],
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+// =====================================================================
+// ChatProvider: 顶层 Provider
+// - 持有共享 reducer state (conversations, dispatch) + currentId
+// - 持有跨 Provider 共享的 refs (conversationsRef, currentIdRef,
+//   justCreatedIdRef, abortRef, streamingConvIdRef)
+// - 持有 localStorage 加载 + 持久化 effect
+// - 包内层两个子 Provider
+// =====================================================================
+
+export function ChatProvider({ children }: { children: ReactNode }) {
+  // ---- 共享 state ----
+  const [conversations, dispatch] = useReducer(convReducer, [])
+  const [currentId, setCurrentId] = useState<string | null>(null)
+
+  // ---- 共享 refs ----
+  const conversationsRef = useRef<Conversation[]>([])
+  conversationsRef.current = conversations
+  const currentIdRef = useRef<string | null>(null)
+  currentIdRef.current = currentId
+  const justCreatedIdRef = useRef<string | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const streamingConvIdRef = useRef<string | null>(null)
+  const hasHydratedRef = useRef(false)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ---- 加载 localStorage（仅一次） ----
+  useEffect(() => {
+    const loaded = loadConversations()
+    dispatch({ type: 'LOAD', payload: loaded })
+    setCurrentId(loadActiveId(loaded))
+    hasHydratedRef.current = true
+  }, [])
+
+  // ---- 持久化：单一写入点，debounce 100ms ----
+  useEffect(() => {
+    if (!hasHydratedRef.current) return
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
+        if (currentId) {
+          localStorage.setItem(ACTIVE_KEY, currentId)
+        }
+      } catch {
+        // localStorage full or unavailable
+      }
+    }, SAVE_DEBOUNCE_MS)
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    }
+  }, [conversations, currentId])
+
+  const state: SharedChatState = {
+    conversations,
+    dispatch,
+    currentId,
+    setCurrentId,
+    conversationsRef,
+    currentIdRef,
+    justCreatedIdRef,
+    abortRef,
+    streamingConvIdRef,
   }
+
+  return (
+    <InnerConversationsProvider state={state}>
+      <InnerStreamingProvider state={state}>
+        {children}
+      </InnerStreamingProvider>
+    </InnerConversationsProvider>
+  )
 }

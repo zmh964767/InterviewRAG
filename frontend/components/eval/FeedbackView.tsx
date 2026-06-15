@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { adminGetFeedback, adminGetFeedbackStats, adminExportFeedback } from '@/lib/api'
 import type { FeedbackItem, FeedbackStats } from '@/lib/types'
 import { EVAL } from '@/lib/copy'
-import { useChatContext } from '@/contexts/ChatContext'
+import { useChatConversationsContext } from '@/contexts/ChatContext'
 
 type RatingFilter = 'all' | '1' | '-1'
 type TimeFilter = 'all' | 'today' | 'week'
@@ -206,7 +206,7 @@ function StatBadge({ label, value, color }: { label: string; value: number | str
 }
 
 function FeedbackRow({ item }: { item: FeedbackItem }) {
-  const { conversations } = useChatContext()
+  const { conversations } = useChatConversationsContext()
   const isPositive = item.rating === 1
   return (
     <div className="px-4 py-3 text-sm" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
