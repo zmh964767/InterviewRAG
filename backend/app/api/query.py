@@ -6,10 +6,12 @@ import logging
 import uuid
 from collections import OrderedDict
 
-from fastapi import APIRouter, Body, Depends, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_rag_service
+from app.config import get_settings
+from app.core.rate_limiter import PerIPRateLimiter, get_client_ip
 from app.models.schemas import QueryRequest, QueryResponse, SourceRef
 from app.services.rag_service import RAGService
 
@@ -59,6 +61,17 @@ class ConversationStore:
 # 对话存储（MVP 用内存 LRU，后续可换 Redis）
 conversation_store = ConversationStore()
 
+# per-IP 查询限流（懒初始化，首次请求时从 Settings 读取配置）
+_query_limiter: PerIPRateLimiter | None = None
+
+
+def _get_query_limiter() -> PerIPRateLimiter:
+    global _query_limiter
+    if _query_limiter is None:
+        s = get_settings()
+        _query_limiter = PerIPRateLimiter(s.query_rate_limit_per_min, 60)
+    return _query_limiter
+
 
 @router.post("/query")
 async def query_endpoint(
@@ -72,6 +85,11 @@ async def query_endpoint(
     和 Pydantic JSON 模型不兼容，FastAPI 会强制校验 SSE 响应，
     导致 'There was an error parsing the body' 错误。
     """
+
+    # per-IP 限流
+    ip = get_client_ip(request, get_settings().trusted_proxies)
+    if not _get_query_limiter().is_allowed(ip):
+        raise HTTPException(429, "请求过于频繁，请稍后再试")
 
     # 获取或创建对话 ID
     conversation_id = query_req.conversation_id or str(uuid.uuid4())
