@@ -22,7 +22,7 @@ sentence-transformers==3.0.0
 ragas==0.2.0
 
 # Document Parsing
-pypdf2==3.0.1
+pypdf==5.0.1
 beautifulsoup4==4.12.3
 requests==2.32.3
 
