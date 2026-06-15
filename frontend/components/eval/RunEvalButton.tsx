@@ -32,26 +32,6 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
     }
   }, [])
 
-  // 卸载时清 polling
-  useEffect(() => () => stopPolling(), [stopPolling])
-
-  // 挂载时检查是否有正在运行的评估任务（防止切页面后状态丢失）
-  useEffect(() => {
-    let cancelled = false
-    adminListEvalTasks()
-      .then((list) => {
-        if (cancelled) return
-        const active = list.tasks.find((t) => t.status === 'running')
-        if (active) {
-          setRunning(true)
-          if (active.total > 0) setProgress({ done: active.done, total: active.total })
-          startPolling(active.task_id)
-        }
-      })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [startPolling])
-
   const startPolling = useCallback((taskId: string) => {
     stopPolling()
     pollingRef.current = setInterval(async () => {
@@ -72,6 +52,26 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
       }
     }, 1500)
   }, [stopPolling])
+
+  // 卸载时清 polling
+  useEffect(() => () => stopPolling(), [stopPolling])
+
+  // 挂载时检查是否有正在运行的评估任务（防止切页面后状态丢失）
+  useEffect(() => {
+    let cancelled = false
+    adminListEvalTasks()
+      .then((list) => {
+        if (cancelled) return
+        const active = list.tasks.find((t) => t.status === 'running')
+        if (active) {
+          setRunning(true)
+          if (active.total > 0) setProgress({ done: active.done, total: active.total })
+          startPolling(active.task_id)
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [startPolling])
 
   const handleRun = useCallback(async () => {
     setError(null)
