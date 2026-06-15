@@ -50,7 +50,7 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
       })
       .catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [startPolling])
 
   const startPolling = useCallback((taskId: string) => {
     stopPolling()
