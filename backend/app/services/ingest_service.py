@@ -58,7 +58,7 @@ class IngestService:
 
     async def ingest_url(self, url: str) -> dict:
         """从 URL 导入"""
-        questions = scrape_url(url)
+        questions = await scrape_url(url)
         return self._ingest_questions(questions)
 
     async def ingest_json(self, file_path: str) -> dict:

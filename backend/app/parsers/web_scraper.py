@@ -1,8 +1,10 @@
 """网页面试题爬虫
 
 支持从掘金、CSDN 等平台抓取面试文章，提取结构化题目。
+HTTP 请求通过 asyncio.to_thread 包裹，避免阻塞事件循环。
 """
 
+import asyncio
 import ipaddress
 import logging
 import socket
@@ -87,17 +89,23 @@ def validate_url(url: str) -> None:
         raise ValueError(f"域名 {host} DNS 解析失败，无法确认目标安全性")
 
 
-def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
+def _fetch(url: str) -> str:
+    """同步 HTTP GET（在线程中调用）"""
+    resp = requests.get(url, headers=HEADERS, timeout=10)
+    resp.raise_for_status()
+    return resp.text
+
+
+async def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
     """抓取掘金文章"""
     validate_url(url)
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
-        resp.raise_for_status()
+        html = await asyncio.to_thread(_fetch, url)
     except Exception as e:
         logger.error(f"请求失败 {url}: {e}")
         return []
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
 
     # 掘金文章内容
     article = soup.find("article") or soup.find(class_="article-content")
@@ -147,17 +155,16 @@ def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
     return questions
 
 
-def scrape_generic_page(url: str, category: str = "面试") -> list[Question]:
+async def scrape_generic_page(url: str, category: str = "面试") -> list[Question]:
     """通用网页抓取"""
     validate_url(url)
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=10)
-        resp.raise_for_status()
+        html = await asyncio.to_thread(_fetch, url)
     except Exception as e:
         logger.error(f"请求失败 {url}: {e}")
         return []
 
-    soup = BeautifulSoup(resp.text, "html.parser")
+    soup = BeautifulSoup(html, "html.parser")
 
     # 移除脚本和样式
     for tag in soup(["script", "style", "nav", "footer", "header"]):
@@ -202,9 +209,9 @@ def scrape_generic_page(url: str, category: str = "面试") -> list[Question]:
     return questions
 
 
-def scrape_url(url: str, category: str = "面试") -> list[Question]:
+async def scrape_url(url: str, category: str = "面试") -> list[Question]:
     """根据 URL 自动选择抓取策略"""
     if "juejin.cn" in url:
-        return scrape_juejin_article(url, category)
+        return await scrape_juejin_article(url, category)
     else:
-        return scrape_generic_page(url, category)
+        return await scrape_generic_page(url, category)
