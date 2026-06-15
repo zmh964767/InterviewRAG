@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 20
     rerank_top_k: int = 5
     bm25_weight: float = 0.3  # BM25 权重，向量权重 = 1 - bm25_weight
+    bm25_refresh_ttl_seconds: float = 30.0  # BM25 懒刷新 TTL（秒），dirty 标记后冷却期
 
     # Query 改写（多路召回合并）
     multi_query_enabled: bool = True   # kill switch：False 时退化为单路混合检索

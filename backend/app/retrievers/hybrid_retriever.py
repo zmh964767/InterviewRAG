@@ -8,6 +8,8 @@ BM25 分词使用 jieba（中文友好），索引通过版本号懒刷新自动
 
 import asyncio
 import logging
+import threading
+import time
 
 import jieba
 import numpy as np
@@ -34,7 +36,12 @@ class HybridRetriever:
         self.corpus_texts: list[str] = []
         self.corpus_metas: list[dict] = []
         self._index_doc_count: int = -1  # -1 表示未构建
+        self._dirty: bool = False  # 显式失效标志（init 已构建，初值 False）
+        self._last_rebuild_at: float = 0.0  # time.monotonic()，避免系统时间跳变
+        self._ttl_seconds: float = self.settings.bm25_refresh_ttl_seconds
+        self._refresh_lock = threading.Lock()
         self._build_bm25_index()
+        self._last_rebuild_at = time.monotonic()
 
     def _build_bm25_index(self):
         """构建 BM25 索引"""
@@ -57,16 +64,31 @@ class HybridRetriever:
             logger.error(f"构建 BM25 索引失败: {e}")
 
     def _maybe_refresh(self):
-        """懒刷新：文档数变化时自动重建索引"""
+        """脏标记 + TTL 兜底：仅 dirty 且 TTL 到期时调 count() 检查"""
+        if not self._dirty:
+            return  # 快速路径：不脏，直接跳过（0 roundtrip）
+        now = time.monotonic()
+        if now - self._last_rebuild_at < self._ttl_seconds:
+            return  # 冷却期内，跳过
+        # TTL 到期，检查文档数
         try:
             current = self.vector_store.count()
         except Exception:
             return
         if current != self._index_doc_count:
-            logger.info(
-                f"BM25 索引过期（{self._index_doc_count} → {current}），自动重建"
-            )
-            self._build_bm25_index()
+            logger.info(f"BM25 索引过期（{self._index_doc_count} → {current}），重建中...")
+            with self._refresh_lock:
+                if not self._dirty:  # double-check: 另一线程已处理
+                    return
+                self._build_bm25_index()
+                self._dirty = False
+                self._last_rebuild_at = time.monotonic()
+        else:
+            # count 未变，索引仍新鲜，清 dirty（锁内防止与 invalidate 竞争）
+            with self._refresh_lock:
+                if self._dirty:  # double-check：若已被清则跳过
+                    self._dirty = False
+                    self._last_rebuild_at = time.monotonic()
 
     def retrieve(
         self,
@@ -207,6 +229,15 @@ class HybridRetriever:
 
         return results
 
+    def invalidate(self):
+        """外部调用：标记索引脏，实际重建延迟到下一次 retrieve"""
+        self._dirty = True
+        logger.debug("BM25 索引已标记为脏，下次查询时重建")
+
     def refresh_index(self):
-        """手动刷新 BM25 索引（外部调用，通常不需要 — _maybe_refresh 自动处理）"""
-        self._build_bm25_index()
+        """强制立即重建 BM25 索引（绕过 TTL，供运维手动触发）"""
+        with self._refresh_lock:
+            self._build_bm25_index()
+            self._dirty = False
+            self._last_rebuild_at = time.monotonic()
+        logger.info("BM25 索引已手动刷新")
