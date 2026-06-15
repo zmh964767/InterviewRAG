@@ -36,6 +36,7 @@ class SourceRef(BaseModel):
     """来源引用"""
     question_id: str = Field(description="题目 ID")
     question_text: str = Field(description="题目文本")
+    answer_text: str = Field(default="", description="参考答案")
     score: float = Field(description="相关度分数")
     category: str = Field(description="分类")
 

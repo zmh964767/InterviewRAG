@@ -1,4 +1,8 @@
-/** API 类型定义 */
+/** API 类型定义
+ *
+ * 后端 schema 来源: backend/app/models/schemas.py
+ * 保持字段名与后端 snake_case 一致（Next.js API routes 直接透传）。
+ */
 
 export interface QueryRequest {
   question: string
@@ -7,13 +11,16 @@ export interface QueryRequest {
   stream?: boolean
 }
 
+/** @see backend/app/models/schemas.py SourceRef */
 export interface SourceRef {
   question_id: string
   question_text: string
+  answer_text: string
   score: number
   category: string
 }
 
+/** @see backend/app/models/schemas.py QueryResponse */
 export interface QueryResponse {
   answer: string
   sources: SourceRef[]
@@ -72,6 +79,7 @@ export interface StreamEvent {
 // 知识库管理
 // =========================================================================
 
+/** @see backend/app/models/schemas.py Question */
 export interface Question {
   id: string
   question: string
@@ -112,8 +120,10 @@ export interface InsertOneRequest {
   source?: string
 }
 
+/** @see backend/app/models/schemas.py TaskStatusResponse */
 export type TaskStatus = 'pending' | 'running' | 'done' | 'failed'
 
+/** @see backend/app/models/schemas.py TaskStatusResponse */
 export interface TaskStatusResponse {
   task_id: string
   status: TaskStatus

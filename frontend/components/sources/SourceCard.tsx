@@ -75,9 +75,15 @@ export function SourceCard({ source, index }: SourceCardProps) {
       {/* Expanded */}
       {expanded && (
         <div className="px-3 pb-3 pt-1 border-t animate-fade-in" style={{ borderColor: 'var(--border-subtle)' }}>
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--ink-light)' }}>
-            {source.question_text}
-          </p>
+          {source.answer_text ? (
+            <p className="text-xs leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--ink-light)' }}>
+              {source.answer_text}
+            </p>
+          ) : (
+            <p className="text-xs italic" style={{ color: 'var(--ink-muted)' }}>
+              暂无参考答案
+            </p>
+          )}
         </div>
       )}
     </div>

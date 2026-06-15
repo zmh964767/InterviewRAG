@@ -128,6 +128,7 @@ async def query_endpoint(
             SourceRef(
                 question_id=s["id"],
                 question_text=s["question"],
+                answer_text=s.get("answer", ""),
                 score=s["score"],
                 category=s["category"],
             )
@@ -166,6 +167,7 @@ async def stream_generator(rag_service, question, history, conversation_id, requ
             {
                 "question_id": s["id"],
                 "question_text": s["question"],
+                "answer_text": s.get("answer", ""),
                 "score": s["score"],
                 "category": s["category"],
             }
