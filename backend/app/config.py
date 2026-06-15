@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # Cookie secure 标志：dev http 设为 False，部署到 https 时必须设 True
     cookie_secure: bool = False
 
+    # 全局请求超时（秒，SSE 流式端点豁免）
+    request_timeout_s: int = 60
+
     # 限流
     query_rate_limit_per_min: int = 30      # /api/query per-IP 限流（次/分钟）
     trusted_proxies: list[str] = []         # XFF 信任代理 IP 列表（空=忽略 XFF）

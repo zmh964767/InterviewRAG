@@ -1,6 +1,7 @@
 """健康检查接口"""
 
 import logging
+import time
 
 from fastapi import APIRouter, Depends
 
@@ -11,10 +12,20 @@ from app.services.rag_service import RAGService
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+# Health check TTL 缓存（避免每次请求都调 LLM API）
+_CACHE_TTL = 60  # seconds
+_cache: dict | None = None
+_cache_ts: float = 0
+
 
 @router.get("/health", response_model=HealthResponse)
 async def health_endpoint(rag: RAGService = Depends(get_rag_service)):
     """健康检查（复用 lifespan 里的共享实例）"""
+    global _cache, _cache_ts
+
+    now = time.monotonic()
+    if _cache is not None and now - _cache_ts < _CACHE_TTL:
+        return HealthResponse(**_cache)
 
     # 检查 VectorStore
     vector_count = 0
@@ -30,11 +41,15 @@ async def health_endpoint(rag: RAGService = Depends(get_rag_service)):
     except Exception as e:
         logger.warning(f"LLM 健康检查异常: {e}")
 
-    return HealthResponse(
-        status="ok",
-        vector_count=vector_count,
-        llm_status=llm_status,
-    )
+    result = {
+        "status": "ok",
+        "vector_count": vector_count,
+        "llm_status": llm_status,
+    }
+    _cache = result
+    _cache_ts = time.monotonic()
+
+    return HealthResponse(**result)
 
 
 @router.get("/ping")

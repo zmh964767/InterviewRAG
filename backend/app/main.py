@@ -1,5 +1,6 @@
 """FastAPI 应用入口"""
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -10,7 +11,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.core import db as db_module
-from app.core.exceptions import AppError
+from app.core.exceptions import AppError, ExternalServiceError
 from app.models.database import Database
 from app.services.rag_service import RAGService
 from app.api import query, health, questions_public
@@ -65,6 +66,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 全局请求超时中间件（SSE 流式端点豁免，由 provider 超时控制）
+_TIMEOUT_EXEMPT_PATHS = {"/api/query"}
+
+
+@app.middleware("http")
+async def timeout_middleware(request: Request, call_next):
+    if request.url.path in _TIMEOUT_EXEMPT_PATHS:
+        return await call_next(request)
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=get_settings().request_timeout_s)
+    except asyncio.TimeoutError:
+        return JSONResponse(status_code=504, content={"detail": "请求超时"})
+
+
 # 注册路由
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(query.router, prefix="/api", tags=["query"])
@@ -79,9 +94,11 @@ app.include_router(admin.router)  # /api/admin/* — JWT 保护(含 feedback 管
 async def app_error_handler(request: Request, exc: AppError):
     """全局应用异常处理"""
     logger.error(f"应用异常: {exc.message} (status={exc.status_code})")
+    # ExternalServiceError 脱敏：不暴露内部服务细节
+    detail = "外部服务暂时不可用" if isinstance(exc, ExternalServiceError) else exc.message
     return JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.message, "status_code": exc.status_code},
+        content={"detail": detail, "status_code": exc.status_code},
     )
 
 

@@ -14,7 +14,6 @@ from app.retrievers.multi_query_retriever import MultiQueryRetriever
 from app.retrievers.query_rewriter import QueryRewriter
 from app.rerankers.bge_reranker import BGEReranker
 from app.services.llm_service import LLMService
-from app.services.embed_service import EmbedService
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,6 @@ class RAGService:
         self.hybrid_retriever = HybridRetriever(self.vector_store)
         self.reranker = BGEReranker()
         self.llm_service = LLMService()
-        self.embed_service = EmbedService()
 
         # 多路改写：rewriter 永远建（让 multi 拿到），multi_query_enabled 是 kill switch
         self.rewriter = QueryRewriter(

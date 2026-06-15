@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import sqlite3
+import threading
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -24,42 +25,44 @@ class Database:
         self.conn = sqlite3.connect(str(db_path), check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
+        self._write_lock = threading.Lock()
         self._init_tables()
 
     def _init_tables(self):
         """初始化表结构"""
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS questions (
-                id TEXT PRIMARY KEY,
-                question TEXT NOT NULL,
-                answer TEXT NOT NULL,
-                category TEXT NOT NULL,
-                difficulty TEXT DEFAULT '中等',
-                source TEXT,
-                tags TEXT DEFAULT '[]',
-                content_hash TEXT UNIQUE,
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS feedback (
-                id TEXT PRIMARY KEY,
-                message_id TEXT NOT NULL UNIQUE,
-                conversation_id TEXT NOT NULL,
-                rating INTEGER NOT NULL,
-                comment TEXT,
-                message_content TEXT NOT NULL,
-                message_role TEXT NOT NULL,
-                client_ip TEXT,
-                user_agent TEXT,
-                created_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_rating ON feedback(rating)")
-        self.conn.commit()
-        logger.info("SQLite 数据库已初始化")
+        with self._write_lock:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS questions (
+                    id TEXT PRIMARY KEY,
+                    question TEXT NOT NULL,
+                    answer TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    difficulty TEXT DEFAULT '中等',
+                    source TEXT,
+                    tags TEXT DEFAULT '[]',
+                    content_hash TEXT UNIQUE,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS feedback (
+                    id TEXT PRIMARY KEY,
+                    message_id TEXT NOT NULL UNIQUE,
+                    conversation_id TEXT NOT NULL,
+                    rating INTEGER NOT NULL,
+                    comment TEXT,
+                    message_content TEXT NOT NULL,
+                    message_role TEXT NOT NULL,
+                    client_ip TEXT,
+                    user_agent TEXT,
+                    created_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_rating ON feedback(rating)")
+            self.conn.commit()
+            logger.info("SQLite 数据库已初始化")
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> dict:
@@ -78,29 +81,30 @@ class Database:
         content = f"{question_data['question']}|{question_data['answer']}"
         content_hash = hashlib.md5(content.encode()).hexdigest()
 
-        try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                """
-                INSERT INTO questions (id, question, answer, category, difficulty, source, tags, content_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    question_data["id"],
-                    question_data["question"],
-                    question_data["answer"],
-                    question_data["category"],
-                    question_data.get("difficulty", "中等"),
-                    question_data.get("source", ""),
-                    json.dumps(question_data.get("tags", []), ensure_ascii=False),
-                    content_hash,
-                ),
-            )
-            self.conn.commit()
-            return True
-        except sqlite3.IntegrityError:
-            # 重复内容，跳过
-            return False
+        with self._write_lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO questions (id, question, answer, category, difficulty, source, tags, content_hash)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        question_data["id"],
+                        question_data["question"],
+                        question_data["answer"],
+                        question_data["category"],
+                        question_data.get("difficulty", "中等"),
+                        question_data.get("source", ""),
+                        json.dumps(question_data.get("tags", []), ensure_ascii=False),
+                        content_hash,
+                    ),
+                )
+                self.conn.commit()
+                return True
+            except sqlite3.IntegrityError:
+                # 重复内容，跳过
+                return False
 
     def get_all_questions(self) -> list[dict]:
         """获取所有题目"""
@@ -122,10 +126,11 @@ class Database:
         Returns:
             True 表示成功删除，False 表示题目不存在
         """
-        cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM questions WHERE id = ?", (question_id,))
-        self.conn.commit()
-        return cursor.rowcount > 0
+        with self._write_lock:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM questions WHERE id = ?", (question_id,))
+            self.conn.commit()
+            return cursor.rowcount > 0
 
     def list_questions(
         self,
@@ -216,14 +221,15 @@ class Database:
         """
         if not ids:
             return 0
-        placeholders = ",".join("?" for _ in ids)
-        cursor = self.conn.cursor()
-        cursor.execute(
-            f"DELETE FROM questions WHERE id IN ({placeholders})",
-            ids,
-        )
-        self.conn.commit()
-        return cursor.rowcount
+        with self._write_lock:
+            placeholders = ",".join("?" for _ in ids)
+            cursor = self.conn.cursor()
+            cursor.execute(
+                f"DELETE FROM questions WHERE id IN ({placeholders})",
+                ids,
+            )
+            self.conn.commit()
+            return cursor.rowcount
 
     def update_question(self, question_id: str, fields: dict) -> bool:
         """更新题目字段，返回是否成功"""
@@ -233,26 +239,27 @@ class Database:
         if not updates:
             return False
 
-        # 如果改了 question 或 answer，重算 content_hash
-        if "question" in updates or "answer" in updates:
-            q = self.get_question_by_id(question_id)
-            if not q:
-                return False
-            new_q = updates.get("question", q["question"])
-            new_a = updates.get("answer", q["answer"])
-            updates["content_hash"] = hashlib.md5(
-                f"{new_q}|{new_a}".encode()
-            ).hexdigest()
+        with self._write_lock:
+            # 如果改了 question 或 answer，重算 content_hash
+            if "question" in updates or "answer" in updates:
+                q = self.get_question_by_id(question_id)
+                if not q:
+                    return False
+                new_q = updates.get("question", q["question"])
+                new_a = updates.get("answer", q["answer"])
+                updates["content_hash"] = hashlib.md5(
+                    f"{new_q}|{new_a}".encode()
+                ).hexdigest()
 
-        set_clause = ", ".join(f"{k} = ?" for k in updates)
-        values = list(updates.values()) + [question_id]
-        cursor = self.conn.cursor()
-        try:
-            cursor.execute(f"UPDATE questions SET {set_clause} WHERE id = ?", values)
-            self.conn.commit()
-            return cursor.rowcount > 0
-        except _sqlite3.IntegrityError:
-            return False
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            values = list(updates.values()) + [question_id]
+            cursor = self.conn.cursor()
+            try:
+                cursor.execute(f"UPDATE questions SET {set_clause} WHERE id = ?", values)
+                self.conn.commit()
+                return cursor.rowcount > 0
+            except _sqlite3.IntegrityError:
+                return False
 
     def close(self):
         """关闭连接"""
@@ -265,35 +272,36 @@ class Database:
     def insert_feedback(self, data: dict) -> str:
         """插入/覆盖反馈(利用 message_id UNIQUE 约束 + INSERT OR REPLACE),返回 feedback.id"""
         feedback_id = str(uuid.uuid4())
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT OR REPLACE INTO feedback (
-                id, message_id, conversation_id, rating, comment,
-                message_content, message_role, client_ip, user_agent
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                feedback_id,
-                data["message_id"],
-                data["conversation_id"],
-                data["rating"],
-                data.get("comment"),
-                data["message_content"],
-                data["message_role"],
-                data.get("client_ip"),
-                data.get("user_agent"),
-            ),
-        )
-        self.conn.commit()
+        with self._write_lock:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO feedback (
+                    id, message_id, conversation_id, rating, comment,
+                    message_content, message_role, client_ip, user_agent
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    feedback_id,
+                    data["message_id"],
+                    data["conversation_id"],
+                    data["rating"],
+                    data.get("comment"),
+                    data["message_content"],
+                    data["message_role"],
+                    data.get("client_ip"),
+                    data.get("user_agent"),
+                ),
+            )
+            self.conn.commit()
 
-        # INSERT OR REPLACE 会按 message_id 覆盖;查回当前最新 id(可能是之前传进去的旧 id)
-        cursor.execute(
-            "SELECT id FROM feedback WHERE message_id = ?",
-            (data["message_id"],),
-        )
-        row = cursor.fetchone()
-        return row["id"] if row else feedback_id
+            # INSERT OR REPLACE 会按 message_id 覆盖;查回当前最新 id(可能是之前传进去的旧 id)
+            cursor.execute(
+                "SELECT id FROM feedback WHERE message_id = ?",
+                (data["message_id"],),
+            )
+            row = cursor.fetchone()
+            return row["id"] if row else feedback_id
 
     def get_feedback(
         self,

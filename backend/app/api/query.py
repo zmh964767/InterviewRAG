@@ -24,6 +24,12 @@ class ConversationStore:
 
     提供 dict-like 接口（__getitem__, __setitem__, __contains__, keys, get），
     保证现有代码和测试兼容。
+
+    实现限制：
+    - 内存 LRU 存储，上限 max_size=100（默认）
+    - 单进程单 worker 限制：多 worker (gunicorn -w N) 下每个 worker 有独立副本，
+      对话状态不共享；同一用户在不同 worker 间的对话历史会丢失
+    - 生产环境多 worker 部署需换 Redis 等外部存储
     """
 
     def __init__(self, max_size: int = 100):
@@ -58,7 +64,7 @@ class ConversationStore:
         return self._store.keys()
 
 
-# 对话存储（MVP 用内存 LRU，后续可换 Redis）
+# 对话存储（内存 LRU max=100，单 worker 限制：多 worker 下各自独立，需 Redis）
 conversation_store = ConversationStore()
 
 # per-IP 查询限流（懒初始化，首次请求时从 Settings 读取配置）

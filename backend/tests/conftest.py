@@ -2,6 +2,7 @@
 
 import os
 import sqlite3
+import threading
 
 import pytest
 from fastapi.testclient import TestClient
@@ -82,6 +83,7 @@ def _isolate_db(tmp_path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     db.conn = conn
+    db._write_lock = threading.Lock()
     db._init_tables()
     db_module.set_db(db)
 

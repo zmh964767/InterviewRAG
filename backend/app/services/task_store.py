@@ -3,8 +3,8 @@
 存储异步导入任务的状态信息。任务完成后保留 1 小时供前端查询。
 """
 
-import asyncio
 import logging
+import threading
 import uuid
 from dataclasses import dataclass, asdict
 from datetime import datetime
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 TaskStatus = Literal["pending", "running", "done", "failed"]
 TERMINAL_STATUSES = ("done", "failed")
+_TERMINAL_TTL_SECONDS = 3600  # 1 hour
 
 
 @dataclass
@@ -41,33 +42,60 @@ class TaskStore:
 
     def __init__(self):
         self._tasks: dict[str, Task] = {}
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
+
+    def _purge_expired(self) -> None:
+        """清理已超时的终态任务（调用方需持有 _lock）"""
+        now = datetime.now()
+        expired = [
+            tid for tid, task in self._tasks.items()
+            if task.status in TERMINAL_STATUSES
+            and task.finished_at
+            and (now - datetime.fromisoformat(task.finished_at)).total_seconds() > _TERMINAL_TTL_SECONDS
+        ]
+        for tid in expired:
+            del self._tasks[tid]
+        if expired:
+            logger.info(f"TaskStore: 清理 {len(expired)} 个过期任务")
 
     def create(self, source_type: str, source: str) -> Task:
         """创建任务，立即返回 task_id"""
-        task = Task(
-            task_id=str(uuid.uuid4()),
-            status="pending",
-            source_type=source_type,
-            source=source,
-            started_at=datetime.now().isoformat(),
-        )
-        self._tasks[task.task_id] = task
-        return task
+        with self._lock:
+            self._purge_expired()
+            task = Task(
+                task_id=str(uuid.uuid4()),
+                status="pending",
+                source_type=source_type,
+                source=source,
+                started_at=datetime.now().isoformat(),
+            )
+            self._tasks[task.task_id] = task
+            return task
 
     def get(self, task_id: str) -> Task | None:
-        return self._tasks.get(task_id)
+        with self._lock:
+            self._purge_expired()
+            return self._tasks.get(task_id)
 
     def list_active(self) -> list[Task]:
-        return [t for t in self._tasks.values() if t.status not in TERMINAL_STATUSES]
+        with self._lock:
+            self._purge_expired()
+            return [t for t in self._tasks.values() if t.status not in TERMINAL_STATUSES]
 
     def list_all(self) -> list[Task]:
-        return list(self._tasks.values())
+        with self._lock:
+            self._purge_expired()
+            return list(self._tasks.values())
 
     def update(self, task_id: str, **kwargs) -> None:
-        if task_id in self._tasks:
-            for k, v in kwargs.items():
-                setattr(self._tasks[task_id], k, v)
+        with self._lock:
+            if task_id in self._tasks:
+                for k, v in kwargs.items():
+                    setattr(self._tasks[task_id], k, v)
+                # 自动设置终态任务的 finished_at
+                if "status" in kwargs and kwargs["status"] in TERMINAL_STATUSES:
+                    if not self._tasks[task_id].finished_at:
+                        self._tasks[task_id].finished_at = datetime.now().isoformat()
 
 
 # 模块级单例

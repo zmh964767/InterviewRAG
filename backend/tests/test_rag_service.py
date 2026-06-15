@@ -30,7 +30,6 @@ def rag_service(monkeypatch):
     monkeypatch.setattr("app.services.rag_service.HybridRetriever", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.BGEReranker", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.LLMService", lambda *a, **kw: MagicMock())
-    monkeypatch.setattr("app.services.rag_service.EmbedService", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.QueryRewriter", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.MultiQueryRetriever", lambda *a, **kw: MagicMock())
 
