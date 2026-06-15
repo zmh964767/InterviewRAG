@@ -13,6 +13,7 @@ JWT 密钥在模块加载时自动初始化：
 
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -30,6 +31,11 @@ COOKIE_NAME = "admin_token"
 # 模块级缓存：JWT 密钥 + 密码覆盖
 _SECRET_KEY: str = ""
 _PASSWORD_OVERRIDE: str | None = None  # 改密码后的内存覆盖（重启失效前的最新值）
+
+# 登录限流：同一 IP 5 分钟内连续失败 5 次后返回 429
+_login_attempts: dict[str, tuple[int, float]] = {}  # ip -> (fail_count, window_start)
+MAX_LOGIN_FAILS = 5
+LOGIN_WINDOW = 300  # 秒（5 分钟）
 
 
 def _init_jwt_secret() -> str:
@@ -64,6 +70,31 @@ def set_password_override(new_password: str | None) -> None:
     _PASSWORD_OVERRIDE = new_password
 
 
+def _get_client_ip(request: Request) -> str:
+    """提取客户端 IP，支持 X-Forwarded-For 代理头"""
+    forwarded = request.headers.get("X-Forwarded-For")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(ip: str) -> None:
+    """检查限流，超限抛 HTTPException(429)"""
+    now = time.monotonic()
+    fails, window_start = _login_attempts.get(ip, (0, now))
+    if now - window_start > LOGIN_WINDOW:
+        _login_attempts[ip] = (1, now)
+        return
+    if fails >= MAX_LOGIN_FAILS:
+        raise HTTPException(429, "登录尝试过于频繁，请 5 分钟后再试")
+    _login_attempts[ip] = (fails + 1, window_start)
+
+
+def _clear_rate_limit(ip: str) -> None:
+    """登录成功，清除该 IP 的限流计数"""
+    _login_attempts.pop(ip, None)
+
+
 class LoginRequest(BaseModel):
     password: str
 
@@ -74,8 +105,12 @@ class LoginResponse(BaseModel):
 
 
 @router.post("/auth/login", response_model=LoginResponse)
-async def login(request: LoginRequest):
-    """管理员登录：验证密码 → 签发 JWT"""
+async def login(request: LoginRequest, http_request: Request):
+    """管理员登录：验证密码 → 签发 JWT
+
+    限流：同一 IP 5 分钟内连续失败 5 次后返回 429。
+    """
+    ip = _get_client_ip(http_request)
     current_pw = get_current_password()
 
     if not current_pw:
@@ -83,8 +118,12 @@ async def login(request: LoginRequest):
         raise HTTPException(status_code=503, detail="服务未配置管理员密码，请联系管理员通过环境变量设置")
 
     if request.password != current_pw:
+        _check_rate_limit(ip)
         logger.warning("管理员登录失败：密码错误")
         raise HTTPException(status_code=401, detail="密码错误")
+
+    # 登录成功，清除该 IP 的限流计数
+    _clear_rate_limit(ip)
 
     secret = _ensure_secret()
     expire = datetime.now(timezone.utc) + timedelta(

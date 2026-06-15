@@ -44,6 +44,7 @@ class Settings(BaseSettings):
 
     # 对话记忆
     memory_window: int = 10
+    max_conversations: int = 100
 
     # CORS（逗号分隔的域名列表，如 "http://localhost:3000,https://example.com"）
     # dev 模式加 :3004 是因为 Next.js dev server 3000 端口常被占用，前端会跑到 3001~3004。

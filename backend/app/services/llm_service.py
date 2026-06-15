@@ -6,6 +6,7 @@
 import asyncio
 import logging
 import queue
+import threading
 from collections.abc import AsyncGenerator
 
 from app.providers import LLMProvider, create_llm_provider
@@ -54,10 +55,16 @@ class LLMService:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> AsyncGenerator[str, None]:
-        """流式对话（sync generator → async generator 适配）"""
+        """流式对话（sync generator → async generator 适配）
+
+        使用 threading.Event 取消信号：当消费方提前停止迭代时，
+        通过 cancelled.set() 通知后台线程停止，并在 finally 中
+        等待线程退出（最多 5 秒），避免线程泄漏。
+        """
         loop = asyncio.get_running_loop()
         q: queue.Queue = queue.Queue()
         sentinel = object()
+        cancelled = threading.Event()
 
         def _sync_stream():
             """在线程中消费 Provider 的 sync stream"""
@@ -67,21 +74,31 @@ class LLMService:
                     temperature=temperature,
                     max_tokens=max_tokens,
                 ):
+                    if cancelled.is_set():
+                        break
                     q.put(token)
             except Exception as e:
-                q.put(e)
+                if not cancelled.is_set():
+                    q.put(e)
             finally:
                 q.put(sentinel)
 
-        loop.run_in_executor(None, _sync_stream)
+        fut = loop.run_in_executor(None, _sync_stream)
 
-        while True:
-            chunk = await loop.run_in_executor(None, q.get)
-            if chunk is sentinel:
-                break
-            if isinstance(chunk, Exception):
-                raise chunk
-            yield chunk
+        try:
+            while True:
+                chunk = await loop.run_in_executor(None, q.get)
+                if chunk is sentinel:
+                    break
+                if isinstance(chunk, Exception):
+                    raise chunk
+                yield chunk
+        finally:
+            cancelled.set()
+            try:
+                await asyncio.wait_for(asyncio.wrap_future(fut), timeout=5.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
 
     def check_health(self) -> str:
         """健康检查（委托给 Provider）"""

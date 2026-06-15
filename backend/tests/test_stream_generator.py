@@ -15,7 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.api.query import stream_generator, conversations
+from app.api.query import stream_generator, conversation_store as conversations
 
 
 # ---- helpers ----
