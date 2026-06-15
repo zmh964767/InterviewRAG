@@ -114,29 +114,29 @@ async def query_endpoint(
 
 
 async def stream_generator(rag_service, question, history, conversation_id, request: Request):
-    """SSE 流式生成器"""
+    """SSE 流式生成器
+
+    断开处理统一在 finally 中：is_disconnected / CancelledError 只设 flag，
+    finally 块根据 flag 决定保存完整或 partial answer，消除重复代码。
+    """
     full_answer = ""
+    completed = False  # True → 正常完成；False → 断开/取消（partial）
+
     try:
         gen = await rag_service.query_stream(
             question=question,
             chat_history=history,
         )
         async for chunk in gen:
-            # 客户端断开（用户切走/导航）→ 主动退出循环，停止 LLM 流
             if await request.is_disconnected():
                 logger.info(
                     f"客户端已断开，停止流式响应 (已生成 {len(full_answer)} chars)"
                 )
-                # 已生成的部分保存到 history
-                if full_answer:
-                    history.append({"role": "user", "content": question})
-                    history.append({"role": "assistant", "content": full_answer + "…"})
-                    conversation_store[conversation_id] = history[-20:]
-                return  # 正常退出 generator
+                return
             full_answer += chunk
             yield f"data: {json.dumps({'content': chunk}, ensure_ascii=False)}\n\n"
 
-        # 获取来源引用（从生成器对象读取，避免实例属性竞争）
+        # 获取来源引用
         sources = getattr(gen, "sources", [])
         source_refs = [
             {
@@ -148,29 +148,27 @@ async def stream_generator(rag_service, question, history, conversation_id, requ
             for s in sources
         ]
 
-        # 发送完成信号（附带来源引用）
         yield f"data: {json.dumps({'done': True, 'conversation_id': conversation_id, 'sources': source_refs}, ensure_ascii=False)}\n\n"
-
-        # 正常完成：把完整问答存入 history
-        history.append({"role": "user", "content": question})
-        history.append({"role": "assistant", "content": full_answer})
-        conversation_store[conversation_id] = history[-20:]
+        completed = True
 
     except asyncio.CancelledError:
-        # 前端主动关闭（用户切走/取消浏览器）
-        # 重要：已生成的部分必须保存到 history
-        if full_answer:
-            history.append({"role": "user", "content": question})
-            history.append({"role": "assistant", "content": full_answer + "…"})
-            conversation_store[conversation_id] = history[-20:]
-            logger.info(
-                f"流式被前端取消，已保存 partial answer ({len(full_answer)} chars) "
-                f"to conversation {conversation_id}"
-            )
-        # 不 raise：避免触发 FastAPI 500
+        logger.info(
+            f"流式被前端取消，保存 partial answer ({len(full_answer)} chars) "
+            f"to conversation {conversation_id}"
+        )
     except Exception as e:
         logger.error(f"流式生成异常: {e}", exc_info=True)
         try:
             yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
         except Exception:
             pass
+        return  # 异常时不保存 history
+    finally:
+        if full_answer:
+            if completed:
+                history.append({"role": "user", "content": question})
+                history.append({"role": "assistant", "content": full_answer})
+            else:
+                history.append({"role": "user", "content": question})
+                history.append({"role": "assistant", "content": full_answer + "…"})
+            conversation_store[conversation_id] = history[-20:]
