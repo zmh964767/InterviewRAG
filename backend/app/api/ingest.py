@@ -129,6 +129,14 @@ async def upload_file(file: UploadFile = File(...), rag: RAGService = Depends(ge
     filename = file.filename or "unknown"
     content = await file.read()
 
+    # 文件大小限制: 10MB
+    max_size = 10 * 1024 * 1024
+    if len(content) > max_size:
+        raise HTTPException(
+            status_code=413,
+            detail=f"文件过大: {len(content)} 字节，最大允许 {max_size} 字节 (10MB)",
+        )
+
     if not (filename.endswith(".md") or filename.endswith(".pdf")):
         raise ValidationError(f"仅支持 .md / .pdf 文件: {filename}")
 

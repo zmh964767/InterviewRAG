@@ -16,7 +16,7 @@ import io
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.api.deps_admin import require_admin
@@ -25,6 +25,17 @@ from app.models.schemas import SubmitFeedbackRequest
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _validate_since(since: str | None) -> str | None:
+    """校验 since 参数为合法 ISO datetime，无效则抛 422"""
+    if since is None:
+        return None
+    try:
+        datetime.fromisoformat(since)
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=422, detail=f"since 参数格式无效，需要 ISO datetime: {since}")
+    return since
 
 
 @router.post("/feedback", status_code=201)
@@ -55,7 +66,7 @@ async def admin_get_feedback(
 ) -> dict:
     """管理端:反馈列表(分页 + 筛选)"""
     db = get_db()
-    return db.get_feedback(rating=rating, since=since, page=page, size=size)
+    return db.get_feedback(rating=rating, since=_validate_since(since), page=page, size=size)
 
 
 @router.get("/feedback/stats", dependencies=[Depends(require_admin)])
@@ -64,7 +75,7 @@ async def admin_get_feedback_stats(
 ) -> dict:
     """管理端:反馈统计(👍 / 👎 / 差评率)"""
     db = get_db()
-    return db.get_feedback_stats(since=since)
+    return db.get_feedback_stats(since=_validate_since(since))
 
 
 @router.get("/feedback/export", dependencies=[Depends(require_admin)])
@@ -75,7 +86,7 @@ async def admin_export_feedback(
     """管理端:导出 CSV(UTF-8 BOM 让 Excel 正确识别中文)"""
     db = get_db()
     # size=10000 限制单次导出上限,够试用阶段;未来可加分页
-    result = db.get_feedback(rating=rating, since=since, page=1, size=10000)
+    result = db.get_feedback(rating=rating, since=_validate_since(since), page=1, size=10000)
     items = result["items"]
 
     output = io.StringIO()

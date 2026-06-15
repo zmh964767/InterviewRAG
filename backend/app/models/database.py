@@ -61,6 +61,7 @@ class Database:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_created_at ON feedback(created_at)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_feedback_rating ON feedback(rating)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_questions_cat_diff ON questions(category, difficulty)")
             self.conn.commit()
             logger.info("SQLite 数据库已初始化")
 
@@ -270,16 +271,23 @@ class Database:
     # =========================================================================
 
     def insert_feedback(self, data: dict) -> str:
-        """插入/覆盖反馈(利用 message_id UNIQUE 约束 + INSERT OR REPLACE),返回 feedback.id"""
+        """插入/更新反馈(ON CONFLICT DO UPDATE,保留原始 id 和 created_at),返回 feedback.id"""
         feedback_id = str(uuid.uuid4())
         with self._write_lock:
             cursor = self.conn.cursor()
             cursor.execute(
                 """
-                INSERT OR REPLACE INTO feedback (
+                INSERT INTO feedback (
                     id, message_id, conversation_id, rating, comment,
                     message_content, message_role, client_ip, user_agent
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(message_id) DO UPDATE SET
+                    rating = excluded.rating,
+                    comment = excluded.comment,
+                    message_content = excluded.message_content,
+                    message_role = excluded.message_role,
+                    client_ip = excluded.client_ip,
+                    user_agent = excluded.user_agent
                 """,
                 (
                     feedback_id,
@@ -295,7 +303,7 @@ class Database:
             )
             self.conn.commit()
 
-            # INSERT OR REPLACE 会按 message_id 覆盖;查回当前最新 id(可能是之前传进去的旧 id)
+            # 查回实际 id（首次插入返回新 id，更新时返回已有 id）
             cursor.execute(
                 "SELECT id FROM feedback WHERE message_id = ?",
                 (data["message_id"],),
