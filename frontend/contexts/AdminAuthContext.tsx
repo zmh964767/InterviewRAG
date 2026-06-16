@@ -3,7 +3,9 @@
 import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import type { ReactNode } from 'react'
 
-const API_BASE = ''
+const API_BASE = typeof window !== 'undefined'
+  ? (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : ''))
+  : ''
 
 interface AdminAuthState {
   isLoggedIn: boolean
