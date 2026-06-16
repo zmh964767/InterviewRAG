@@ -45,7 +45,11 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
           setRunning(false)
           setProgress(null)
           if (t.status === 'done') onCompleteRef.current()
-          else setError(typeof t.error_message === 'string' ? t.error_message : '评估失败')
+          else {
+            const errMsg = typeof t.error_message === 'string' ? t.error_message : (t.error_message ? JSON.stringify(t.error_message) : '评估失败')
+            console.error('[RunEval] task failed:', errMsg)
+            setError(errMsg)
+          }
         }
       } catch {
         // ignore poll error
@@ -81,6 +85,7 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
       setProgress(null)
       startPolling(task_id)
     } catch (e) {
+      console.error('[RunEval] error:', e, 'type:', typeof e, 'isError:', e instanceof Error)
       const msg = e instanceof Error ? e.message : (typeof e === 'object' ? JSON.stringify(e) : String(e))
       setError(msg || '触发失败')
     }

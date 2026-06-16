@@ -45,7 +45,7 @@ export async function query(request: QueryRequest): Promise<QueryResponse> {
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '请求失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
 
   return res.json()
@@ -72,7 +72,7 @@ export async function* queryStream(
 
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '请求失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
 
   const reader = res.body?.getReader()
@@ -165,8 +165,19 @@ export async function listQuestions(
 // 管理端 API（httpOnly cookie 自动携带 JWT）
 // =========================================================================
 
-/** 通用 fetch 选项：携带 cookie（JWT httpOnly cookie 自动随请求发送） */
-const FETCH_OPTS: RequestInit = { credentials: 'include' }
+/** 通用 fetch 选项：携带 cookie + JSON Content-Type */
+const JSON_HEADERS = { 'Content-Type': 'application/json' }
+const FETCH_OPTS: RequestInit = { credentials: 'include', headers: JSON_HEADERS }
+
+/** 从 FastAPI 错误响应中提取消息（detail 可能是字符串或数组） */
+function extractError(data: { detail?: unknown }, fallback: string): string {
+  if (!data?.detail) return fallback
+  if (typeof data.detail === 'string') return data.detail
+  if (Array.isArray(data.detail)) {
+    return data.detail.map((d: { msg?: string }) => d.msg || JSON.stringify(d)).join('; ')
+  }
+  return String(data.detail)
+}
 
 /** 管理端：题目列表（功能同公开，但走 /api/admin/）
 
@@ -196,7 +207,7 @@ export async function adminDeleteQuestion(id: string): Promise<DeleteQuestionRes
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '删除失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -210,7 +221,7 @@ export async function adminBatchDelete(ids: string[]): Promise<{ deleted: number
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '批量删除失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -227,7 +238,7 @@ export async function adminUpdateQuestion(
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '更新失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -251,7 +262,7 @@ export async function adminInsertOne(request: InsertOneRequest): Promise<Questio
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '插入失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -268,7 +279,7 @@ export async function adminSubmitIngestTask(
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '任务提交失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -279,12 +290,12 @@ export async function adminUploadIngestFile(file: File): Promise<IngestTaskAccep
   formData.append('file', file)
   const res = await fetch(`${API_BASE}/api/admin/ingest/upload`, {
     method: 'POST',
-    ...FETCH_OPTS,
+    credentials: 'include',
     body: formData,
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '上传失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -322,7 +333,7 @@ export async function adminCompareEval(
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '对比失败' }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(err, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -360,7 +371,7 @@ export async function adminRunEval(request: { mode: string }): Promise<{ task_id
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '触发评估失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -380,7 +391,7 @@ export async function adminCancelEval(): Promise<{ cancelled: number }> {
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '取消失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -400,7 +411,7 @@ export async function adminChangePassword(
   })
   if (!res.ok) {
     const error = await res.json().catch(() => ({ detail: '修改失败' }))
-    throw new Error(error.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(error, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -420,7 +431,7 @@ export async function submitFeedback(
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '提交失败' }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(err, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -438,7 +449,7 @@ export async function adminGetFeedback(
   const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '查询失败' }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(err, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -451,7 +462,7 @@ export async function adminGetFeedbackStats(since?: string): Promise<FeedbackSta
   const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '统计查询失败' }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(err, `HTTP ${res.status}`))
   }
   return res.json()
 }
@@ -468,7 +479,7 @@ export async function adminExportFeedback(
   const res = await fetch(url, FETCH_OPTS)
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: '导出失败' }))
-    throw new Error(err.detail || `HTTP ${res.status}`)
+    throw new Error(extractError(err, `HTTP ${res.status}`))
   }
   // 触发浏览器下载
   const blob = await res.blob()
