@@ -45,7 +45,7 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
           setRunning(false)
           setProgress(null)
           if (t.status === 'done') onCompleteRef.current()
-          else setError(t.error_message || '评估失败')
+          else setError(typeof t.error_message === 'string' ? t.error_message : '评估失败')
         }
       } catch {
         // ignore poll error
@@ -81,7 +81,8 @@ export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
       setProgress(null)
       startPolling(task_id)
     } catch (e) {
-      setError(e instanceof Error ? e.message : '触发失败')
+      const msg = e instanceof Error ? e.message : (typeof e === 'object' ? JSON.stringify(e) : String(e))
+      setError(msg || '触发失败')
     }
   }, [mode, startPolling])
 

@@ -197,6 +197,7 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
 
     query_sem = asyncio.Semaphore(2)  # 智谱 60/min rate limit；2 路 RAG 查询并发
     QUERY_TIMEOUT_S = 30.0  # 单题最长耗时（含检索 + LLM 生成）
+    completed_count = 0  # 已完成查询数（用于实时进度回调）
 
     total = len(items)
     # exact 题型直接走单路混合检索，跳过多路改写（exact 是知识库原问题，改写几乎无收益）
@@ -206,6 +207,7 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
     hybrid_retriever = rag.hybrid_retriever  # exact 路径用
 
     async def query_one(idx: int, item: dict):
+        nonlocal completed_count
         async with query_sem:
             try:
                 if item["question"] in exact_questions:
@@ -226,6 +228,9 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
                     answer = await loop.run_in_executor(
                         None, lambda: rag.llm_service.chat(messages)
                     )
+                    completed_count += 1
+                    if progress_callback:
+                        progress_callback(completed_count, total)
                     return item, answer, sources[: rag.settings.rerank_top_k]
                 # 其他题型：走完整 rag.query（多路改写 + 混合检索 + 生成）
                 result = await asyncio.wait_for(
@@ -234,12 +239,21 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
                 )
                 rag_answer = result.get("answer", "")
                 rag_answer = rag_answer or "(空回答)"
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(completed_count, total)
                 return item, rag_answer, result.get("sources", [])
             except asyncio.TimeoutError:
                 logger.warning(f"题目 {item.get('id', '?')} RAG 超时 (>={QUERY_TIMEOUT_S}s)，跳过")
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(completed_count, total)
                 raise
             except Exception as e:
                 logger.warning(f"题目 {item.get('id', '?')} RAG 失败: {e}")
+                completed_count += 1
+                if progress_callback:
+                    progress_callback(completed_count, total)
                 raise
 
     all_query_results = await asyncio.gather(
