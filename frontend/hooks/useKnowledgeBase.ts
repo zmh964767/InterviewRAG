@@ -38,6 +38,9 @@ export function useKnowledgeBase(): UseKnowledgeBaseResult {
   const [category, setCategory] = useState('')
   const [difficulty, setDifficulty] = useState('')
 
+  // AbortController ref for cancelling stale requests
+  const abortRef = useRef<AbortController | null>(null)
+
   // 搜索框 300ms debounce
   const [qDebounced, setQDebounced] = useState('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -53,6 +56,7 @@ export function useKnowledgeBase(): UseKnowledgeBaseResult {
   useEffect(
     () => () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
+      abortRef.current?.abort()
     },
     [],
   )
@@ -60,6 +64,11 @@ export function useKnowledgeBase(): UseKnowledgeBaseResult {
   const filters = { q, category, difficulty }
 
   const load = useCallback(async () => {
+    // Abort previous in-flight request
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setIsLoading(true)
     setError(null)
     try {
@@ -70,13 +79,18 @@ export function useKnowledgeBase(): UseKnowledgeBaseResult {
         category,
         difficulty,
       })
+      // Skip state update if this request was superseded
+      if (controller.signal.aborted) return
       setItems(res.items)
       setTotal(res.total)
       setCategories(res.categories)
     } catch (e) {
+      if (controller.signal.aborted) return
       setError(e instanceof Error ? e.message : '加载失败')
     } finally {
-      setIsLoading(false)
+      if (!controller.signal.aborted) {
+        setIsLoading(false)
+      }
     }
   }, [page, size, qDebounced, category, difficulty])
 

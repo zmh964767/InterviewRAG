@@ -122,6 +122,7 @@ class IngestService:
                 logger.info(f"ChromaDB 总计已添加 {len(ids)} 个文档")
             except Exception as e:
                 logger.error(f"ChromaDB 写入失败: {e}")
+                ingested -= len(ids)
                 errors += len(ids)
 
         result = {"ingested": ingested, "duplicates": duplicates, "errors": errors}

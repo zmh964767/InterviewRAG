@@ -85,14 +85,13 @@ class RAGService:
                     query=question, top_k=self.settings.retrieval_top_k
                 ),
             )
-        sources = self._process_results(raw)
-        if self.reranker.is_available() and sources:
-            sources = self.reranker.rerank(
+        if self.reranker.is_available() and raw:
+            raw = self.reranker.rerank(
                 query=question,
-                documents=sources,
+                documents=raw,
                 top_k=self.settings.rerank_top_k,
             )
-        return sources
+        return self._process_results(raw)
 
     async def query(
         self,
@@ -160,7 +159,9 @@ class RAGService:
             answer_text = parts[1].strip() if len(parts) > 1 else ""
 
             # 优先使用 rerank_score，其次 rrf_score，最后 0
-            score = doc.get("rerank_score") or doc.get("rrf_score") or 0.0
+            score = doc.get("rerank_score")
+            if score is None:
+                score = doc.get("rrf_score", 0.0)
 
             sources.append({
                 "id": doc.get("id", ""),
@@ -202,7 +203,8 @@ class RAGService:
         # 添加对话历史
         if chat_history:
             for msg in chat_history[-self.settings.memory_window * 2 :]:
-                messages.append(msg)
+                if msg.get("role") in ("user", "assistant") and msg.get("content"):
+                    messages.append(msg)
 
         # 添加当前问题和上下文
         user_content = f"参考资料：\n{context}\n\n用户问题：{question}"

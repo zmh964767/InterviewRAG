@@ -1,18 +1,12 @@
 'use client'
 
 import type { Question } from '@/lib/types'
+import { formatTime } from '@/lib/utils'
 
 interface QuestionCardProps {
   question: Question
   onSelect: (q: Question) => void
   onDelete?: (q: Question) => void
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return ''
-  const m = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/)
-  if (m) return `${m[1]} ${m[2]}`
-  return iso
 }
 
 export function QuestionCard({ question, onSelect, onDelete }: QuestionCardProps) {

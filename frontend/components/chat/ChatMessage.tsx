@@ -171,12 +171,14 @@ export function ChatMessage({
                 重新生成
               </button>
             )}
-            <FeedbackBar
-              messageId={message.id}
-              conversationId={message.conversationId ?? 'unknown'}
-              messageContent={message.content}
-              messageRole={message.role}
-            />
+            {message.conversationId && (
+              <FeedbackBar
+                messageId={message.id}
+                conversationId={message.conversationId}
+                messageContent={message.content}
+                messageRole={message.role}
+              />
+            )}
           </div>
         )}
 

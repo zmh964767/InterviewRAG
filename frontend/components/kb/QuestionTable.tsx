@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import type { Question } from '@/lib/types'
+import { formatTime } from '@/lib/utils'
 
 interface QuestionTableProps {
   items: Question[]
@@ -16,13 +17,6 @@ const DIFFICULTY_COLORS: Record<string, string> = {
   简单: 'var(--success)',
   中等: 'var(--ink-muted)',
   困难: 'var(--accent)',
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return ''
-  const m = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/)
-  if (m) return `${m[1]} ${m[2]}`
-  return iso
 }
 
 export function QuestionTable({ items, selectedIds = new Set(), onToggleSelect = () => {}, onToggleSelectAll = () => {}, onSelect, onDelete }: QuestionTableProps) {

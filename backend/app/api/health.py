@@ -41,8 +41,9 @@ async def health_endpoint(rag: RAGService = Depends(get_rag_service)):
     except Exception as e:
         logger.warning(f"LLM 健康检查异常: {e}")
 
+    status = "ok" if llm_status != "error" else "degraded"
     result = {
-        "status": "ok",
+        "status": status,
         "vector_count": vector_count,
         "llm_status": llm_status,
     }

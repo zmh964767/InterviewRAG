@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import type { Question } from '@/lib/types'
 import { adminUpdateQuestion } from '@/lib/api'
+import { formatTime } from '@/lib/utils'
 
 interface QuestionDetailProps {
   question: Question | null
@@ -14,13 +15,6 @@ interface QuestionDetailProps {
 
 const DIFFICULTY_OPTIONS = ['简单', '中等', '困难']
 const CUSTOM_CATEGORY = '__custom__'
-
-function formatTime(iso: string): string {
-  if (!iso) return ''
-  const m = iso.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2})/)
-  if (m) return m[0].replace('T', ' ')
-  return iso
-}
 
 export function QuestionDetail({ question, categories = [], onClose, onDelete, onSave }: QuestionDetailProps) {
   const [editCategory, setEditCategory] = useState('')
@@ -205,7 +199,7 @@ export function QuestionDetail({ question, categories = [], onClose, onDelete, o
 
           <div className="grid grid-cols-2 gap-4">
             <Section label="来源" value={question.source || '—'} />
-            <Section label="创建时间" value={formatTime(question.created_at)} />
+            <Section label="创建时间" value={formatTime(question.created_at, true)} />
           </div>
 
           <div>

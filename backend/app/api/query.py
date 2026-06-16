@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import threading
 import uuid
 from collections import OrderedDict
 
@@ -35,33 +36,39 @@ class ConversationStore:
     def __init__(self, max_size: int = 100):
         self._max_size = max_size
         self._store: OrderedDict[str, list] = OrderedDict()
+        self._lock = threading.Lock()
 
     def get(self, cid: str, default: list | None = None) -> list | None:
         """读取对话历史，命中时更新 LRU 顺序。"""
-        if cid in self._store:
-            self._store.move_to_end(cid)
-            return self._store[cid]
-        return default
+        with self._lock:
+            if cid in self._store:
+                self._store.move_to_end(cid)
+                return self._store[cid]
+            return default
 
     def put(self, cid: str, history: list) -> None:
         """写入对话历史，超限时淘汰最久未访问的。"""
-        self._store[cid] = history
-        self._store.move_to_end(cid)
-        while len(self._store) > self._max_size:
-            self._store.popitem(last=False)
+        with self._lock:
+            self._store[cid] = history
+            self._store.move_to_end(cid)
+            while len(self._store) > self._max_size:
+                self._store.popitem(last=False)
 
     def __contains__(self, cid: str) -> bool:
-        return cid in self._store
+        with self._lock:
+            return cid in self._store
 
     def __getitem__(self, cid: str) -> list:
-        self._store.move_to_end(cid)
-        return self._store[cid]
+        with self._lock:
+            self._store.move_to_end(cid)
+            return self._store[cid]
 
     def __setitem__(self, cid: str, value: list) -> None:
         self.put(cid, value)
 
     def keys(self):
-        return self._store.keys()
+        with self._lock:
+            return list(self._store.keys())
 
 
 # 对话存储（内存 LRU max=100，单 worker 限制：多 worker 下各自独立，需 Redis）
@@ -185,7 +192,7 @@ async def stream_generator(rag_service, question, history, conversation_id, requ
     except Exception as e:
         logger.error(f"流式生成异常: {e}", exc_info=True)
         try:
-            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'error': '生成异常，请重试'}, ensure_ascii=False)}\n\n"
         except Exception:
             pass
         return  # 异常时不保存 history

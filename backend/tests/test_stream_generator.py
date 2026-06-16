@@ -178,7 +178,7 @@ class TestStreamGeneratorException:
         assert len(results) == 2
         error_frame = json.loads(results[-1].removeprefix("data: ").strip())
         assert "error" in error_frame
-        assert "LLM 服务挂了" in error_frame["error"]
+        assert error_frame["error"] == "生成异常，请重试"
 
     @pytest.mark.asyncio
     async def test_history_not_saved_on_error(self):

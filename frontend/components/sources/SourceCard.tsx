@@ -20,7 +20,10 @@ export function SourceCard({ source, index }: SourceCardProps) {
       {/* Header */}
       <div
         className="flex items-center justify-between px-3 py-2 cursor-pointer"
+        role="button"
+        tabIndex={0}
         onClick={() => setExpanded(!expanded)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setExpanded(!expanded); } }}
         onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'var(--paper)' }}
         onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.background = 'transparent' }}
       >

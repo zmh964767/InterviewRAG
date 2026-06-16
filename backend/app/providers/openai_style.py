@@ -4,6 +4,7 @@
 """
 
 import logging
+import re
 from collections.abc import Generator
 
 from openai import OpenAI
@@ -13,6 +14,13 @@ from app.core.exceptions import ExternalServiceError
 from app.providers.base import EmbeddingProvider, LLMProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _sanitize_error(exc: Exception) -> str:
+    """Remove potential API keys from error messages."""
+    msg = str(exc)
+    msg = re.sub(r'(?:sk-|key[=:]\s*)[A-Za-z0-9_-]{20,}', '[REDACTED]', msg)
+    return msg
 
 
 class OpenAIStyleLLMProvider(LLMProvider):
@@ -51,13 +59,13 @@ class OpenAIStyleLLMProvider(LLMProvider):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=temperature or self.default_temperature,
-                max_tokens=max_tokens or self.default_max_tokens,
+                temperature=temperature if temperature is not None else self.default_temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.default_max_tokens,
             )
-            return response.choices[0].message.content
+            return response.choices[0].message.content or ""
         except Exception as e:
             logger.error(f"OpenAI 兼容 LLM 调用失败: {e}")
-            raise ExternalServiceError("OpenAI兼容API", str(e))
+            raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 
     def chat_stream(
         self,
@@ -69,8 +77,8 @@ class OpenAIStyleLLMProvider(LLMProvider):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=temperature or self.default_temperature,
-                max_tokens=max_tokens or self.default_max_tokens,
+                temperature=temperature if temperature is not None else self.default_temperature,
+                max_tokens=max_tokens if max_tokens is not None else self.default_max_tokens,
                 stream=True,
             )
             for chunk in response:
@@ -78,7 +86,7 @@ class OpenAIStyleLLMProvider(LLMProvider):
                     yield chunk.choices[0].delta.content
         except Exception as e:
             logger.error(f"OpenAI 兼容 LLM 流式调用失败: {e}")
-            raise ExternalServiceError("OpenAI兼容API", str(e))
+            raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 
     def check_health(self) -> str:
         try:
@@ -125,7 +133,7 @@ class OpenAIStyleEmbeddingProvider(EmbeddingProvider):
             return response.data[0].embedding
         except Exception as e:
             logger.error(f"OpenAI 兼容 Embedding 调用失败: {e}")
-            raise ExternalServiceError("OpenAI兼容API", str(e))
+            raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
         try:
@@ -136,4 +144,4 @@ class OpenAIStyleEmbeddingProvider(EmbeddingProvider):
             return [item.embedding for item in response.data]
         except Exception as e:
             logger.error(f"OpenAI 兼容批量 Embedding 调用失败: {e}")
-            raise ExternalServiceError("OpenAI兼容API", str(e))
+            raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))

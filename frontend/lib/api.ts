@@ -23,13 +23,15 @@ import type {
   FeedbackStats,
 } from './types'
 
-const API_BASE = ''  // 空字符串 → 相对路径，走 Next.js rewrites 代理（Docker 生产由 NEXT_PUBLIC_API_URL 覆盖）
+const API_BASE = typeof window !== 'undefined'
+  ? (process.env.NEXT_PUBLIC_API_URL || '')
+  : ''
 
 // 流式 SSE 需要直连 backend（Next.js dev server rewrite 缓冲 SSE，无法产生打字机效果）
 // 生产环境由 NEXT_PUBLIC_API_URL 统一控制
-const SSE_API_BASE = typeof window !== 'undefined' && process.env.NODE_ENV === 'development'
-  ? 'http://localhost:8080'
-  : API_BASE
+const SSE_API_BASE = typeof window !== 'undefined'
+  ? (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : ''))
+  : ''
 
 /** 普通查询 */
 export async function query(request: QueryRequest): Promise<QueryResponse> {

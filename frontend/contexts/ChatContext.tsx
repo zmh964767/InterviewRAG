@@ -563,6 +563,13 @@ function InnerStreamingProvider({
     })
   }, [])
 
+  // Abort in-flight SSE request on unmount
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+    }
+  }, [abortRef])
+
   const value = useMemo<ChatStreamingContextValue>(
     () => ({
       isLoading,
