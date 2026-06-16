@@ -59,7 +59,7 @@ async def delete_question(
         rag.vector_store.delete_by_id(question_id)
     except Exception as e:
         logger.error(f"ChromaDB 删除失败: {e}")
-        raise HTTPException(status_code=500, detail=f"ChromaDB 删除失败: {e}")
+        raise HTTPException(status_code=500, detail="删除失败，请稍后重试")
 
     if not db.delete_by_id(question_id):
         raise NotFoundError("题目", question_id)

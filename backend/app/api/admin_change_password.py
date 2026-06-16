@@ -5,6 +5,7 @@ POST /api/admin/change-password — 改密码（需有效 JWT，写回 .env）
 放在独立文件避免和 auth.py 循环导入（auth.py 不依赖 deps_admin）。
 """
 
+import hmac
 import logging
 import re
 from pathlib import Path
@@ -82,7 +83,7 @@ async def change_password(request: ChangePasswordRequest):
     """
     current_pw = auth_module.get_current_password()
 
-    if request.current_password != current_pw:
+    if not hmac.compare_digest(request.current_password, current_pw):
         raise HTTPException(status_code=401, detail="当前密码错误")
 
     new_pw = request.new_password.strip()
