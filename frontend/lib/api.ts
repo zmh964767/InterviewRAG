@@ -23,14 +23,16 @@ import type {
   FeedbackStats,
 } from './types'
 
+// 开发环境直连后端（Next.js rewrite 代理有超时问题，LLM 长调用会被截断）
+// 生产环境走相对路径，由 Next.js rewrites 或 Nginx 代理
+const _DEV_BACKEND = 'http://localhost:8080'
 const API_BASE = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_API_URL || '')
+  ? (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? _DEV_BACKEND : ''))
   : ''
 
-// 流式 SSE 需要直连 backend（Next.js dev server rewrite 缓冲 SSE，无法产生打字机效果）
-// 生产环境由 NEXT_PUBLIC_API_URL 统一控制
+// SSE 同样直连后端（Next.js dev server rewrite 缓冲 SSE，无法产生打字机效果）
 const SSE_API_BASE = typeof window !== 'undefined'
-  ? (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:8080' : ''))
+  ? (process.env.NEXT_PUBLIC_API_URL || (process.env.NODE_ENV === 'development' ? _DEV_BACKEND : ''))
   : ''
 
 /** 普通查询 */
