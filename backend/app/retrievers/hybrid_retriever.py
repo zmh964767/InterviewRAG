@@ -7,18 +7,18 @@ BM25 分词使用 jieba（中文友好），索引通过版本号懒刷新自动
 """
 
 import asyncio
-import logging
 import threading
 import time
 
 import jieba
 import numpy as np
+import structlog
 from rank_bm25 import BM25Okapi
 
 from app.config import get_settings
 from app.core.vectorstore import VectorStore
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _tokenize(text: str) -> list[str]:
@@ -48,7 +48,7 @@ class HybridRetriever:
         try:
             all_docs = self.vector_store.get_all()
             if not all_docs or not all_docs.get("documents"):
-                logger.warning("ChromaDB 为空，无法构建 BM25 索引")
+                logger.warning("bm25_empty_chromadb")
                 self._index_doc_count = 0
                 return
 
@@ -59,9 +59,9 @@ class HybridRetriever:
             self.bm25_index = BM25Okapi(tokenized)
             self._index_doc_count = len(self.corpus_texts)
 
-            logger.info(f"BM25 索引已构建（jieba），文档数: {self._index_doc_count}")
+            logger.info("bm25_index_built", doc_count=self._index_doc_count)
         except Exception as e:
-            logger.error(f"构建 BM25 索引失败: {e}")
+            logger.error("bm25_index_failed", error=str(e))
 
     def _maybe_refresh(self):
         """脏标记 + TTL 兜底：仅 dirty 且 TTL 到期时调 count() 检查"""
@@ -76,7 +76,7 @@ class HybridRetriever:
         except Exception:
             return
         if current != self._index_doc_count:
-            logger.info(f"BM25 索引过期（{self._index_doc_count} → {current}），重建中...")
+            logger.info("bm25_index_expired", old_count=self._index_doc_count, new_count=current)
             with self._refresh_lock:
                 if not self._dirty:  # double-check: 另一线程已处理
                     return
@@ -160,7 +160,7 @@ class HybridRetriever:
                 })
             return docs
         except Exception as e:
-            logger.error(f"向量检索失败: {e}")
+            logger.error("vector_retrieval_failed", error=str(e))
             return []
 
     def _bm25_search(self, query: str, k: int) -> list[dict]:
@@ -188,7 +188,7 @@ class HybridRetriever:
                     })
             return docs
         except Exception as e:
-            logger.error(f"BM25 检索失败: {e}")
+            logger.error("bm25_retrieval_failed", error=str(e))
             return []
 
     def _reciprocal_rank_fusion(
@@ -232,7 +232,7 @@ class HybridRetriever:
     def invalidate(self):
         """外部调用：标记索引脏，实际重建延迟到下一次 retrieve"""
         self._dirty = True
-        logger.debug("BM25 索引已标记为脏，下次查询时重建")
+        logger.debug("bm25_index_dirty")
 
     def refresh_index(self):
         """强制立即重建 BM25 索引（绕过 TTL，供运维手动触发）"""
@@ -240,4 +240,4 @@ class HybridRetriever:
             self._build_bm25_index()
             self._dirty = False
             self._last_rebuild_at = time.monotonic()
-        logger.info("BM25 索引已手动刷新")
+        logger.info("bm25_index_refreshed")

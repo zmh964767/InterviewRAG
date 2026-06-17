@@ -4,8 +4,9 @@
 """
 
 import asyncio
-import logging
 from collections.abc import AsyncGenerator
+
+import structlog
 
 from app.cache.sqlite_cache import SQLiteCacheBackend
 from app.config import get_settings
@@ -18,7 +19,7 @@ from app.retrievers.query_rewriter import QueryRewriter
 from app.rerankers.bge_reranker import BGEReranker
 from app.services.llm_service import LLMService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class _StreamWithSources:
@@ -131,7 +132,7 @@ class RAGService:
                 CACHE_MISSES.inc()
                 return None, embedding
         except Exception as e:
-            logger.warning(f"缓存查询异常（降级走正常链路）: {e}")
+            logger.warning("cache_query_error", error=str(e), fallback=True)
             return None, None
 
     async def _cache_put(self, question: str, result: dict, embedding: list[float] | None = None) -> None:
@@ -157,7 +158,7 @@ class RAGService:
                 ),
             )
         except Exception as e:
-            logger.warning(f"缓存写入异常（不影响返回）: {e}")
+            logger.warning("cache_write_error", error=str(e))
 
     async def query(
         self,

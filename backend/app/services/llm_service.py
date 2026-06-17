@@ -4,16 +4,17 @@
 """
 
 import asyncio
-import logging
 import queue
 import threading
 import time
 from collections.abc import AsyncGenerator
 
+import structlog
+
 from app.core.metrics import LLM_ERRORS, LLM_LATENCY, LLM_TOKENS
 from app.providers import LLMProvider, create_llm_provider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class LLMService:

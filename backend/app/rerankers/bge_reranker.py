@@ -4,9 +4,10 @@
 注意：首次使用需要下载模型（约 1.1GB）。
 """
 
-import logging
 
-logger = logging.getLogger(__name__)
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 
 class BGEReranker:
@@ -25,26 +26,23 @@ class BGEReranker:
         # 评估场景可通过 SKIP_RERANKER=1 跳过加载（Windows 加载卡死）
         import os
         if os.environ.get("SKIP_RERANKER", "").lower() in ("1", "true", "yes"):
-            logger.info("SKIP_RERANKER 已设置，跳过 Re-ranker 加载")
+            logger.info("reranker_skipped", reason="SKIP_RERANKER env set")
             return
         try:
             from pathlib import Path
-            # 检查模型是否已缓存（避免首次查询时下载 1.1GB）
             cache_dir = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface"))
             model_dir = cache_dir / "hub" / f"models--{self.model_name.replace('/', '--')}"
             if not model_dir.exists():
-                logger.warning(f"Re-ranker 模型未下载，跳过（首次使用需手动下载）")
+                logger.warning("reranker_model_not_found", model=self.model_name)
                 return
 
             from sentence_transformers import CrossEncoder
             self.model = CrossEncoder(self.model_name)
-            logger.info(f"Re-ranker 模型已加载: {self.model_name}")
+            logger.info("reranker_loaded", model=self.model_name)
         except ImportError:
-            logger.error(
-                "sentence-transformers 未安装，请运行: pip install sentence-transformers"
-            )
+            logger.error("reranker_import_failed", fix="pip install sentence-transformers")
         except Exception as e:
-            logger.error(f"加载 Re-ranker 模型失败: {e}")
+            logger.error("reranker_load_failed", error=str(e))
 
     def rerank(
         self,
@@ -56,7 +54,7 @@ class BGEReranker:
         self._ensure_loaded()
 
         if not self.model:
-            logger.warning("Re-ranker 模型未加载，返回原始顺序")
+            logger.warning("reranker_not_loaded")
             return documents[:top_k]
 
         if not documents:
@@ -73,11 +71,11 @@ class BGEReranker:
                 doc["rerank_score"] = float(score)
                 results.append(doc)
 
-            logger.info(f"Re-ranking 完成，返回 {len(results)} 个文档")
+            logger.info("rerank_complete", result_count=len(results))
             return results
 
         except Exception as e:
-            logger.error(f"Re-ranking 失败: {e}")
+            logger.error("rerank_failed", error=str(e))
             return documents[:top_k]
 
     def is_available(self) -> bool:

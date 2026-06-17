@@ -12,8 +12,10 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.core import db as db_module
 from app.core.exceptions import AppError, ExternalServiceError
+from app.core.logging_config import setup_logging
 from app.core.metrics import router as metrics_router
 from app.core.metrics_middleware import MetricsMiddleware
+from app.core.request_id_middleware import RequestIDMiddleware
 from app.models.database import Database
 from app.services.rag_service import RAGService
 from app.api import query, health, questions_public
@@ -21,12 +23,11 @@ from app.api import auth
 from app.api import admin
 from app.api import feedback as feedback_router
 
-# 日志配置
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-)
-logger = logging.getLogger(__name__)
+# 日志配置（structlog + JSON 格式，开发环境可通过 STRUCTLOG_DEV=1 切换彩色输出）
+import os as _os
+setup_logging(json_output=_os.environ.get("STRUCTLOG_DEV") != "1")
+import structlog
+logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
@@ -37,7 +38,7 @@ async def lifespan(app: FastAPI):
         os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
 
     settings = get_settings()
-    logger.info(f"启动 InterviewRAG，ChromaDB 路径: {settings.chroma_persist_dir}")
+    logger.info("app_startup", chroma_path=settings.chroma_persist_dir)
 
     # 统一初始化共享实例
     db = Database()
@@ -49,7 +50,7 @@ async def lifespan(app: FastAPI):
 
     # 清理
     db_module.close_db()
-    logger.info("关闭 InterviewRAG")
+    logger.info("app_shutdown")
 
 
 app = FastAPI(
@@ -87,6 +88,9 @@ async def timeout_middleware(request: Request, call_next):
 # LIFO 顺序：Metrics 包在 Timeout 外层，确保计时完整
 app.add_middleware(MetricsMiddleware)
 
+# Request ID 中间件（绑定 structlog contextvars，LIFO 最先执行）
+app.add_middleware(RequestIDMiddleware)
+
 
 # 注册路由
 app.include_router(metrics_router)  # /metrics — Prometheus 抓取端点
@@ -102,8 +106,7 @@ app.include_router(admin.router)  # /api/admin/* — JWT 保护(含 feedback 管
 @app.exception_handler(AppError)
 async def app_error_handler(request: Request, exc: AppError):
     """全局应用异常处理"""
-    logger.error(f"应用异常: {exc.message} (status={exc.status_code})")
-    # ExternalServiceError 脱敏：不暴露内部服务细节
+    logger.error("app_error", message=exc.message, status_code=exc.status_code)
     detail = "外部服务暂时不可用" if isinstance(exc, ExternalServiceError) else exc.message
     return JSONResponse(
         status_code=exc.status_code,
@@ -114,7 +117,7 @@ async def app_error_handler(request: Request, exc: AppError):
 @app.exception_handler(Exception)
 async def generic_error_handler(request: Request, exc: Exception):
     """全局未知异常处理"""
-    logger.error(f"未处理异常: {exc}", exc_info=True)
+    logger.error("unhandled_exception", exc_info=True)
     return JSONResponse(
         status_code=500,
         content={"detail": "服务器内部错误", "status_code": 500},

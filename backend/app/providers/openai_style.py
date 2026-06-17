@@ -3,17 +3,17 @@
 适用于 OpenAI / Azure OpenAI / Ollama / 任意 OpenAI 兼容端点。
 """
 
-import logging
 import re
 from collections.abc import Generator
 
+import structlog
 from openai import OpenAI
 
 from app.config import get_settings
 from app.core.exceptions import ExternalServiceError
 from app.providers.base import EmbeddingProvider, LLMProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _sanitize_error(exc: Exception) -> str:
@@ -46,8 +46,10 @@ class OpenAIStyleLLMProvider(LLMProvider):
         self.default_temperature = settings.llm_temperature
         self.default_max_tokens = settings.llm_max_tokens
         logger.info(
-            f"OpenAI 兼容 LLM Provider 已初始化，模型: {self.model}"
-            f"{f'，端点: {base_url}' if base_url else ''}"
+            "provider_init",
+            provider="openai",
+            model=self.model,
+            endpoint=base_url or "default",
         )
 
     def chat(
@@ -75,7 +77,7 @@ class OpenAIStyleLLMProvider(LLMProvider):
             return response.choices[0].message.content or ""
         except Exception as e:
             self._last_usage = None
-            logger.error(f"OpenAI 兼容 LLM 调用失败: {e}")
+            logger.error("llm_call_failed", provider="openai", error=_sanitize_error(e))
             raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 
     def chat_stream(
@@ -96,7 +98,7 @@ class OpenAIStyleLLMProvider(LLMProvider):
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
         except Exception as e:
-            logger.error(f"OpenAI 兼容 LLM 流式调用失败: {e}")
+            logger.error("llm_stream_failed", provider="openai", error=_sanitize_error(e))
             raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 
     def check_health(self) -> str:
@@ -108,7 +110,7 @@ class OpenAIStyleLLMProvider(LLMProvider):
             )
             return "ok"
         except Exception as e:
-            logger.warning(f"OpenAI 兼容 LLM 健康检查失败: {e}")
+            logger.warning("health_check_failed", provider="openai", error=str(e))
             return "error"
 
 
@@ -131,8 +133,10 @@ class OpenAIStyleEmbeddingProvider(EmbeddingProvider):
         )
         self.model = settings.openai_embedding_model or settings.embedding_model
         logger.info(
-            f"OpenAI 兼容 Embedding Provider 已初始化，模型: {self.model}"
-            f"{f'，端点: {base_url}' if base_url else ''}"
+            "embedding_provider_init",
+            provider="openai",
+            model=self.model,
+            endpoint=base_url or "default",
         )
 
     def embed_query(self, text: str) -> list[float]:
@@ -143,7 +147,7 @@ class OpenAIStyleEmbeddingProvider(EmbeddingProvider):
             )
             return response.data[0].embedding
         except Exception as e:
-            logger.error(f"OpenAI 兼容 Embedding 调用失败: {e}")
+            logger.error("embedding_call_failed", provider="openai", error=_sanitize_error(e))
             raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -154,5 +158,5 @@ class OpenAIStyleEmbeddingProvider(EmbeddingProvider):
             )
             return [item.embedding for item in response.data]
         except Exception as e:
-            logger.error(f"OpenAI 兼容批量 Embedding 调用失败: {e}")
+            logger.error("embedding_batch_failed", provider="openai", error=_sanitize_error(e))
             raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))

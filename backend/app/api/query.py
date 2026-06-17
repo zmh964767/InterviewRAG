@@ -2,11 +2,11 @@
 
 import asyncio
 import json
-import logging
 import threading
 import uuid
 from collections import OrderedDict
 
+import structlog
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
@@ -17,7 +17,7 @@ from app.core.rate_limiter import PerIPRateLimiter, get_client_ip
 from app.models.schemas import QueryRequest, QueryResponse, SourceRef
 from app.services.rag_service import RAGService
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
@@ -165,7 +165,8 @@ async def stream_generator(rag_service, question, history, conversation_id, requ
         async for chunk in gen:
             if await request.is_disconnected():
                 logger.info(
-                    f"客户端已断开，停止流式响应 (已生成 {len(full_answer)} chars)"
+                    "client_disconnected",
+                    chars_generated=len(full_answer),
                 )
                 return
             full_answer += chunk
@@ -189,11 +190,12 @@ async def stream_generator(rag_service, question, history, conversation_id, requ
 
     except asyncio.CancelledError:
         logger.info(
-            f"流式被前端取消，保存 partial answer ({len(full_answer)} chars) "
-            f"to conversation {conversation_id}"
+            "stream_cancelled",
+            chars_generated=len(full_answer),
+            conversation_id=conversation_id,
         )
     except Exception as e:
-        logger.error(f"流式生成异常: {e}", exc_info=True)
+        logger.error("stream_error", error=str(e), exc_info=True)
         try:
             yield f"data: {json.dumps({'error': '生成异常，请重试'}, ensure_ascii=False)}\n\n"
         except Exception:

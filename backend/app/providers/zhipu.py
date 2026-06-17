@@ -3,17 +3,17 @@
 包装 zhipuai.ZhipuAI SDK，实现 LLMProvider 和 EmbeddingProvider。
 """
 
-import logging
 import re
 from collections.abc import Generator
 
+import structlog
 from zhipuai import ZhipuAI
 
 from app.config import get_settings
 from app.core.exceptions import ExternalServiceError
 from app.providers.base import EmbeddingProvider, LLMProvider
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _sanitize_error(exc: Exception) -> str:
@@ -39,7 +39,7 @@ class ZhipuLLMProvider(LLMProvider):
         self.model = settings.llm_model
         self.default_temperature = settings.llm_temperature
         self.default_max_tokens = settings.llm_max_tokens
-        logger.info(f"智谱 LLM Provider 已初始化，模型: {self.model}")
+        logger.info("provider_init", provider="zhipu", model=self.model)
 
     def chat(
         self,
@@ -66,7 +66,7 @@ class ZhipuLLMProvider(LLMProvider):
             return response.choices[0].message.content or ""
         except Exception as e:
             self._last_usage = None
-            logger.error(f"智谱 LLM 调用失败: {e}")
+            logger.error("llm_call_failed", provider="zhipu", error=_sanitize_error(e))
             raise ExternalServiceError("智谱API", _sanitize_error(e))
 
     def chat_stream(
@@ -87,7 +87,7 @@ class ZhipuLLMProvider(LLMProvider):
                 if chunk.choices[0].delta.content:
                     yield chunk.choices[0].delta.content
         except Exception as e:
-            logger.error(f"智谱 LLM 流式调用失败: {e}")
+            logger.error("llm_stream_failed", provider="zhipu", error=_sanitize_error(e))
             raise ExternalServiceError("智谱API", _sanitize_error(e))
 
     def check_health(self) -> str:
@@ -99,7 +99,7 @@ class ZhipuLLMProvider(LLMProvider):
             )
             return "ok"
         except Exception as e:
-            logger.warning(f"智谱 LLM 健康检查失败: {e}")
+            logger.warning("health_check_failed", provider="zhipu", error=str(e))
             return "error"
 
 
@@ -116,7 +116,7 @@ class ZhipuEmbeddingProvider(EmbeddingProvider):
             timeout=settings.llm_timeout_s,
         )
         self.model = settings.embedding_model
-        logger.info(f"智谱 Embedding Provider 已初始化，模型: {self.model}")
+        logger.info("embedding_provider_init", provider="zhipu", model=self.model)
 
     def embed_query(self, text: str) -> list[float]:
         try:
@@ -126,7 +126,7 @@ class ZhipuEmbeddingProvider(EmbeddingProvider):
             )
             return response.data[0].embedding
         except Exception as e:
-            logger.error(f"智谱 Embedding 调用失败: {e}")
+            logger.error("embedding_call_failed", provider="zhipu", error=_sanitize_error(e))
             raise ExternalServiceError("智谱Embedding", _sanitize_error(e))
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
@@ -137,5 +137,5 @@ class ZhipuEmbeddingProvider(EmbeddingProvider):
             )
             return [item.embedding for item in response.data]
         except Exception as e:
-            logger.error(f"智谱批量 Embedding 调用失败: {e}")
+            logger.error("embedding_batch_failed", provider="zhipu", error=_sanitize_error(e))
             raise ExternalServiceError("智谱Embedding", _sanitize_error(e))

@@ -4,17 +4,18 @@
 embedding 以 JSON 序列化存储，查询时用 numpy cosine 计算相似度。
 """
 
+import hashlib
 import json
-import logging
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+import structlog
 
 from app.config import get_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
@@ -122,13 +123,15 @@ class SQLiteCacheBackend:
                 self._conn.commit()
 
             best_result["similarity"] = round(best_similarity, 4)
+            query_hash = hashlib.sha256(best_query_text.encode()).hexdigest()[:12]
             logger.info(
-                f"cache_hit=true, similarity={best_similarity:.4f}, "
-                f"query='{best_query_text[:50]}'"
+                "cache_hit",
+                similarity=round(best_similarity, 4),
+                query_hash=query_hash,
             )
             return best_result
 
-        logger.info(f"cache_miss, best_similarity={best_similarity:.4f}")
+        logger.info("cache_miss", best_similarity=round(best_similarity, 4))
         return None
 
     def put(
@@ -165,9 +168,10 @@ class SQLiteCacheBackend:
                     (excess,),
                 )
                 self._conn.commit()
-                logger.info(f"缓存 LRU 淘汰：删除 {excess} 条旧条目")
+                logger.info("cache_lru_evict", removed=excess)
 
-        logger.info(f"缓存写入: query='{query_text[:50]}', 条目数={min(count, self._max_entries)}")
+        query_hash = hashlib.sha256(query_text.encode()).hexdigest()[:12]
+        logger.info("cache_write", query_hash=query_hash, entry_count=min(count, self._max_entries))
 
     def invalidate(self) -> int:
         """全量清除缓存"""

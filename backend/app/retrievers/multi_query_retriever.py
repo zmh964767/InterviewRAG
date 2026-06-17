@@ -5,12 +5,13 @@ score 取 max，累加 matched_queries 便于回溯。
 """
 
 import asyncio
-import logging
+
+import structlog
 
 from app.retrievers.hybrid_retriever import HybridRetriever
 from app.retrievers.query_rewriter import QueryRewriter
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class MultiQueryRetriever:
@@ -79,7 +80,7 @@ class MultiQueryRetriever:
             try:
                 return self.hybrid.retrieve(query=q, top_k=per_query_k)
             except Exception as e:
-                logger.warning(f"MultiQuery: 单路失败 query='{q[:30]}...': {e}")
+                logger.warning("multi_query_branch_failed", query_preview=q[:30], error=str(e))
                 return []
 
         # 并发跑 N 路（线程池）
