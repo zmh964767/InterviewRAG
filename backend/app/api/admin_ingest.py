@@ -96,14 +96,18 @@ async def ingest_endpoint(request: dict, rag: RAGService = Depends(get_rag_servi
 
     service = _get_ingest_service(rag)
     task = task_store.create(source_type, source)
-    invalidate = rag.hybrid_retriever.invalidate
+
+    def _invalidate_all():
+        rag.hybrid_retriever.invalidate()
+        if rag.cache:
+            rag.cache.invalidate()
 
     if source_type == "md":
-        asyncio.create_task(_run_task(task.task_id, service.ingest_md(source), on_success=invalidate))
+        asyncio.create_task(_run_task(task.task_id, service.ingest_md(source), on_success=_invalidate_all))
     elif source_type == "pdf":
-        asyncio.create_task(_run_task(task.task_id, service.ingest_pdf(source), on_success=invalidate))
+        asyncio.create_task(_run_task(task.task_id, service.ingest_pdf(source), on_success=_invalidate_all))
     elif source_type == "url":
-        asyncio.create_task(_run_task(task.task_id, service.ingest_url(source), on_success=invalidate))
+        asyncio.create_task(_run_task(task.task_id, service.ingest_url(source), on_success=_invalidate_all))
 
     return IngestTaskAccepted(task_id=task.task_id)
 
@@ -131,12 +135,17 @@ async def upload_file(file: UploadFile = File(...), rag: RAGService = Depends(ge
     service = _get_ingest_service(rag)
     task = task_store.create("upload", filename)
 
+    def _invalidate_all():
+        rag.hybrid_retriever.invalidate()
+        if rag.cache:
+            rag.cache.invalidate()
+
     if filename.endswith(".md"):
         coro = service.ingest_md_content(content.decode("utf-8"), filename)
     else:
         coro = service.ingest_pdf_content(content, filename)
 
-    asyncio.create_task(_run_task(task.task_id, coro, on_success=rag.hybrid_retriever.invalidate))
+    asyncio.create_task(_run_task(task.task_id, coro, on_success=_invalidate_all))
     return IngestTaskAccepted(task_id=task.task_id)
 
 
@@ -175,6 +184,8 @@ async def insert_one(request: InsertOneRequest, rag: RAGService = Depends(get_ra
             }],
         )
         rag.hybrid_retriever.invalidate()
+        if rag.cache:
+            rag.cache.invalidate()
     except Exception as e:
         logger.error(f"insert-one ChromaDB 写入失败（SQLite 已成功）: {e}")
 

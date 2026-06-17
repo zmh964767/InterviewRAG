@@ -7,8 +7,10 @@ import asyncio
 import logging
 from collections.abc import AsyncGenerator
 
+from app.cache.sqlite_cache import SQLiteCacheBackend
 from app.config import get_settings
 from app.core.vectorstore import VectorStore
+from app.providers import create_embedding_provider
 from app.retrievers.hybrid_retriever import HybridRetriever
 from app.retrievers.multi_query_retriever import MultiQueryRetriever
 from app.retrievers.query_rewriter import QueryRewriter
@@ -52,6 +54,10 @@ class RAGService:
         self.reranker = BGEReranker()
         self.llm_service = LLMService()
 
+        # 语义缓存
+        self.cache = SQLiteCacheBackend() if self.settings.cache_enabled else None
+        self.embed_provider = create_embedding_provider()
+
         # 多路改写：rewriter 永远建（让 multi 拿到），multi_query_enabled 是 kill switch
         self.rewriter = QueryRewriter(
             self.llm_service,
@@ -93,12 +99,70 @@ class RAGService:
             )
         return self._process_results(raw)
 
+    async def _cache_check(self, question: str) -> tuple[dict | None, list[float] | None]:
+        """语义缓存查询。
+
+        Returns:
+            (cached_result, embedding): 命中时 cached_result 非空；
+            未命中时 (None, embedding) — embedding 可供 _cache_put 复用，避免重复计算。
+            异常时返回 (None, None)。
+        """
+        if not self.cache:
+            return None, None
+        try:
+            loop = asyncio.get_running_loop()
+            embedding = await loop.run_in_executor(
+                None, lambda: self.embed_provider.embed_query(question)
+            )
+            cached = await loop.run_in_executor(
+                None,
+                lambda: self.cache.get(
+                    embedding, self.settings.cache_similarity_threshold
+                ),
+            )
+            if cached:
+                return cached, embedding
+            return None, embedding
+        except Exception as e:
+            logger.warning(f"缓存查询异常（降级走正常链路）: {e}")
+            return None, None
+
+    async def _cache_put(self, question: str, result: dict, embedding: list[float] | None = None) -> None:
+        """写入缓存（best-effort，失败不影响返回）
+
+        Args:
+            question: 查询文本
+            result: RAG 结果
+            embedding: 预计算的 embedding（可选，为 None 时重新计算）
+        """
+        if not self.cache:
+            return
+        try:
+            loop = asyncio.get_running_loop()
+            if embedding is None:
+                embedding = await loop.run_in_executor(
+                    None, lambda: self.embed_provider.embed_query(question)
+                )
+            await loop.run_in_executor(
+                None,
+                lambda: self.cache.put(
+                    question, embedding, result, self.settings.cache_ttl_hours
+                ),
+            )
+        except Exception as e:
+            logger.warning(f"缓存写入异常（不影响返回）: {e}")
+
     async def query(
         self,
         question: str,
         chat_history: list[dict] | None = None,
     ) -> dict:
         """问答（普通返回）"""
+        # 语义缓存查询
+        cached, cached_embedding = await self._cache_check(question)
+        if cached:
+            return cached
+
         # 检索（多路改写 → 合并 → re-rank）
         sources = await self._retrieve(question)
 
@@ -114,10 +178,15 @@ class RAGService:
             None, lambda: self.llm_service.chat(messages)
         )
 
-        return {
+        result = {
             "answer": answer,
             "sources": sources[: self.settings.rerank_top_k],
         }
+
+        # 写入缓存（复用 _cache_check 算出的 embedding）
+        await self._cache_put(question, result, embedding=cached_embedding)
+
+        return result
 
     async def query_stream(
         self,
@@ -132,6 +201,17 @@ class RAGService:
         - `gen.sources` 读取来源引用（无实例属性竞争：sources 挂在 gen 上，
           不同请求各持自己的 gen，互不干扰）
         """
+        # 语义缓存查询：命中时一次性返回完整答案
+        cached, cached_embedding = await self._cache_check(question)
+        if cached:
+            cached_answer = cached["answer"]
+            cached_sources = cached.get("sources", [])
+
+            async def _cached_inner() -> AsyncGenerator[str, None]:
+                yield cached_answer
+
+            return _StreamWithSources(cached_sources, _cached_inner())
+
         sources = await self._retrieve(question)
         top_sources = sources[: self.settings.rerank_top_k]
 
@@ -140,8 +220,12 @@ class RAGService:
 
         # 内部 async generator：转发 LLM 流（_StreamWithSources.__aiter__ 直接返回它）
         async def _inner() -> AsyncGenerator[str, None]:
+            full_answer = ""
             async for chunk in self.llm_service.chat_stream(messages):
+                full_answer += chunk
                 yield chunk
+            # 流式完成后写入缓存（复用 _cache_check 算出的 embedding）
+            await self._cache_put(question, {"answer": full_answer, "sources": top_sources}, embedding=cached_embedding)
 
         return _StreamWithSources(top_sources, _inner())
 

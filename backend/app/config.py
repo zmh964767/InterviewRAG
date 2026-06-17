@@ -80,6 +80,13 @@ class Settings(BaseSettings):
     # 全局请求超时（秒，SSE 流式端点豁免）
     request_timeout_s: int = 60
 
+    # 语义缓存
+    cache_enabled: bool = True                    # 总开关：False 时跳过缓存
+    cache_similarity_threshold: float = 0.95      # 相似度阈值（0~1）
+    cache_ttl_hours: int = 24                     # TTL（小时）
+    cache_max_entries: int = 1000                 # LRU 上限
+    cache_db_path: str = "./data/semantic_cache.db"  # SQLite 缓存库路径
+
     # 限流
     query_rate_limit_per_min: int = 30      # /api/query per-IP 限流（次/分钟）
     trusted_proxies: list[str] = []         # XFF 信任代理 IP 列表（空=忽略 XFF）

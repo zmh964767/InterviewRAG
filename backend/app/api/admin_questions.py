@@ -64,6 +64,9 @@ async def delete_question(
     if not db.delete_by_id(question_id):
         raise NotFoundError("题目", question_id)
 
+    if rag.cache:
+        rag.cache.invalidate()
+
     return DeleteQuestionResponse(deleted=True, id=question_id)
 
 
@@ -80,6 +83,10 @@ async def batch_delete_questions(
         logger.error(f"ChromaDB 批量删除失败: {e}")
         # 不回滚，继续删 SQLite
     deleted = db.batch_delete(request.ids)
+
+    if rag.cache:
+        rag.cache.invalidate()
+
     return BatchDeleteResponse(deleted=deleted)
 
 
@@ -88,6 +95,7 @@ async def update_question(
     question_id: str,
     request: UpdateQuestionRequest,
     db: Database = Depends(get_db),
+    rag: RAGService = Depends(get_rag_service),
 ):
     """更新题目（分类/难度/题面/答案）"""
     fields = request.model_dump(exclude_none=True)
@@ -95,5 +103,9 @@ async def update_question(
         raise HTTPException(status_code=400, detail="未提供更新字段")
     if not db.update_question(question_id, fields):
         raise NotFoundError("题目", question_id)
+
+    if rag.cache:
+        rag.cache.invalidate()
+
     updated = db.get_question_by_id(question_id)
     return Question(**updated)
