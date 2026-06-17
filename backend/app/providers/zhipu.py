@@ -27,6 +27,7 @@ class ZhipuLLMProvider(LLMProvider):
     """智谱 LLM 提供者（GLM-4-Flash 等）"""
 
     def __init__(self):
+        super().__init__()
         settings = get_settings()
         if not settings.zhipu_api_key:
             raise ExternalServiceError("智谱API", "未配置 ZHIPU_API_KEY")
@@ -53,8 +54,18 @@ class ZhipuLLMProvider(LLMProvider):
                 temperature=temperature if temperature is not None else self.default_temperature,
                 max_tokens=max_tokens if max_tokens is not None else self.default_max_tokens,
             )
+            # 记录 token 用量（供 LLMService 读取并上报指标）
+            if hasattr(response, "usage") and response.usage:
+                self._last_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+            else:
+                self._last_usage = None
             return response.choices[0].message.content or ""
         except Exception as e:
+            self._last_usage = None
             logger.error(f"智谱 LLM 调用失败: {e}")
             raise ExternalServiceError("智谱API", _sanitize_error(e))
 

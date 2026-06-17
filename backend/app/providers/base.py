@@ -14,10 +14,22 @@ class LLMProvider(ABC):
     Provider 自身不需要处理 asyncio。
 
     实现者需实现：
-    - chat(): 同步对话
+    - chat(): 同步对话（成功后设置 _last_usage）
     - chat_stream(): 同步流式生成（yield token）
     - check_health(): 连通性检查
     """
+
+    def __init__(self):
+        self._last_usage: dict | None = None
+
+    @property
+    def last_usage(self) -> dict | None:
+        """最近一次 chat() 调用返回的 token 用量。
+
+        格式: {"prompt_tokens": int, "completion_tokens": int, "total_tokens": int}
+        仅在 chat() 成功后可用；chat_stream() 通常不返回 usage。
+        """
+        return self._last_usage
 
     @abstractmethod
     def chat(

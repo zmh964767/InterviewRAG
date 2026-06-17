@@ -12,6 +12,8 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.core import db as db_module
 from app.core.exceptions import AppError, ExternalServiceError
+from app.core.metrics import router as metrics_router
+from app.core.metrics_middleware import MetricsMiddleware
 from app.models.database import Database
 from app.services.rag_service import RAGService
 from app.api import query, health, questions_public
@@ -81,7 +83,13 @@ async def timeout_middleware(request: Request, call_next):
         return JSONResponse(status_code=504, content={"detail": "请求超时"})
 
 
+# HTTP 指标中间件（记录请求数 / 耗时 / 并发数）
+# LIFO 顺序：Metrics 包在 Timeout 外层，确保计时完整
+app.add_middleware(MetricsMiddleware)
+
+
 # 注册路由
+app.include_router(metrics_router)  # /metrics — Prometheus 抓取端点
 app.include_router(auth.router, prefix="/api", tags=["auth"])
 app.include_router(query.router, prefix="/api", tags=["query"])
 app.include_router(questions_public.router, prefix="/api", tags=["questions"])

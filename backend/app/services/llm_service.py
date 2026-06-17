@@ -7,8 +7,10 @@ import asyncio
 import logging
 import queue
 import threading
+import time
 from collections.abc import AsyncGenerator
 
+from app.core.metrics import LLM_ERRORS, LLM_LATENCY, LLM_TOKENS
 from app.providers import LLMProvider, create_llm_provider
 
 logger = logging.getLogger(__name__)
@@ -42,12 +44,27 @@ class LLMService:
         temperature: float | None = None,
         max_tokens: int | None = None,
     ) -> str:
-        """同步对话（委托给 Provider）"""
-        return self._provider.chat(
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
+        """同步对话（委托给 Provider），记录延迟 + token 用量 + 错误"""
+        start = time.perf_counter()
+        try:
+            result = self._provider.chat(
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            LLM_LATENCY.observe(time.perf_counter() - start)
+            # 记录 token 用量（provider 在 chat() 成功后设置 last_usage）
+            usage = self._provider.last_usage
+            if usage:
+                if usage.get("prompt_tokens"):
+                    LLM_TOKENS.labels(type="prompt").observe(usage["prompt_tokens"])
+                if usage.get("completion_tokens"):
+                    LLM_TOKENS.labels(type="completion").observe(usage["completion_tokens"])
+            return result
+        except Exception as e:
+            LLM_LATENCY.observe(time.perf_counter() - start)
+            LLM_ERRORS.labels(error_type=type(e).__name__).inc()
+            raise
 
     async def chat_stream(
         self,
@@ -65,6 +82,7 @@ class LLMService:
         q: queue.Queue = queue.Queue()
         sentinel = object()
         cancelled = threading.Event()
+        llm_start = time.perf_counter()
 
         def _sync_stream():
             """在线程中消费 Provider 的 sync stream"""
@@ -91,8 +109,11 @@ class LLMService:
                 if chunk is sentinel:
                     break
                 if isinstance(chunk, Exception):
+                    LLM_LATENCY.observe(time.perf_counter() - llm_start)
+                    LLM_ERRORS.labels(error_type=type(chunk).__name__).inc()
                     raise chunk
                 yield chunk
+            LLM_LATENCY.observe(time.perf_counter() - llm_start)
         finally:
             cancelled.set()
             try:

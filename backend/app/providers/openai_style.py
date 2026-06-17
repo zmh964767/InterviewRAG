@@ -27,6 +27,7 @@ class OpenAIStyleLLMProvider(LLMProvider):
     """OpenAI 兼容 LLM 提供者（GPT / Ollama / 任意兼容端点）"""
 
     def __init__(self):
+        super().__init__()
         settings = get_settings()
         api_key = settings.openai_api_key
         if not api_key:
@@ -62,8 +63,18 @@ class OpenAIStyleLLMProvider(LLMProvider):
                 temperature=temperature if temperature is not None else self.default_temperature,
                 max_tokens=max_tokens if max_tokens is not None else self.default_max_tokens,
             )
+            # 记录 token 用量（供 LLMService 读取并上报指标）
+            if hasattr(response, "usage") and response.usage:
+                self._last_usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
+            else:
+                self._last_usage = None
             return response.choices[0].message.content or ""
         except Exception as e:
+            self._last_usage = None
             logger.error(f"OpenAI 兼容 LLM 调用失败: {e}")
             raise ExternalServiceError("OpenAI兼容API", _sanitize_error(e))
 

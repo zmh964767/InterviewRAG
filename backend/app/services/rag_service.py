@@ -9,6 +9,7 @@ from collections.abc import AsyncGenerator
 
 from app.cache.sqlite_cache import SQLiteCacheBackend
 from app.config import get_settings
+from app.core.metrics import CACHE_HITS, CACHE_MISSES, track_stage
 from app.core.vectorstore import VectorStore
 from app.providers import create_embedding_provider
 from app.retrievers.hybrid_retriever import HybridRetriever
@@ -79,24 +80,27 @@ class RAGService:
         在 async 上下文里直接 await，避免嵌套 event loop。
         """
         if self.settings.multi_query_enabled:
-            raw = await self.multi_query_retriever.aretrieve(
-                query=question, top_k=self.settings.retrieval_top_k
-            )
-        else:
-            # 单路走线程池（hybrid.retrieve 是同步阻塞）
-            loop = asyncio.get_running_loop()
-            raw = await loop.run_in_executor(
-                None,
-                lambda: self.hybrid_retriever.retrieve(
+            async with track_stage("retrieval"):
+                raw = await self.multi_query_retriever.aretrieve(
                     query=question, top_k=self.settings.retrieval_top_k
-                ),
-            )
+                )
+        else:
+            async with track_stage("retrieval"):
+                # 单路走线程池（hybrid.retrieve 是同步阻塞）
+                loop = asyncio.get_running_loop()
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self.hybrid_retriever.retrieve(
+                        query=question, top_k=self.settings.retrieval_top_k
+                    ),
+                )
         if self.reranker.is_available() and raw:
-            raw = self.reranker.rerank(
-                query=question,
-                documents=raw,
-                top_k=self.settings.rerank_top_k,
-            )
+            async with track_stage("rerank"):
+                raw = self.reranker.rerank(
+                    query=question,
+                    documents=raw,
+                    top_k=self.settings.rerank_top_k,
+                )
         return self._process_results(raw)
 
     async def _cache_check(self, question: str) -> tuple[dict | None, list[float] | None]:
@@ -110,19 +114,22 @@ class RAGService:
         if not self.cache:
             return None, None
         try:
-            loop = asyncio.get_running_loop()
-            embedding = await loop.run_in_executor(
-                None, lambda: self.embed_provider.embed_query(question)
-            )
-            cached = await loop.run_in_executor(
-                None,
-                lambda: self.cache.get(
-                    embedding, self.settings.cache_similarity_threshold
-                ),
-            )
-            if cached:
-                return cached, embedding
-            return None, embedding
+            async with track_stage("cache_check"):
+                loop = asyncio.get_running_loop()
+                embedding = await loop.run_in_executor(
+                    None, lambda: self.embed_provider.embed_query(question)
+                )
+                cached = await loop.run_in_executor(
+                    None,
+                    lambda: self.cache.get(
+                        embedding, self.settings.cache_similarity_threshold
+                    ),
+                )
+                if cached:
+                    CACHE_HITS.inc()
+                    return cached, embedding
+                CACHE_MISSES.inc()
+                return None, embedding
         except Exception as e:
             logger.warning(f"缓存查询异常（降级走正常链路）: {e}")
             return None, None

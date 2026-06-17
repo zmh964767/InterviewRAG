@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 from app.api.deps import get_rag_service
 from app.config import get_settings
+from app.core.metrics import ACTIVE_CONVERSATIONS, RATE_LIMIT_REJECTIONS
 from app.core.rate_limiter import PerIPRateLimiter, get_client_ip
 from app.models.schemas import QueryRequest, QueryResponse, SourceRef
 from app.services.rag_service import RAGService
@@ -53,6 +54,7 @@ class ConversationStore:
             self._store.move_to_end(cid)
             while len(self._store) > self._max_size:
                 self._store.popitem(last=False)
+            ACTIVE_CONVERSATIONS.set(len(self._store))
 
     def __contains__(self, cid: str) -> bool:
         with self._lock:
@@ -102,6 +104,7 @@ async def query_endpoint(
     # per-IP 限流
     ip = get_client_ip(request, get_settings().trusted_proxies)
     if not _get_query_limiter().is_allowed(ip):
+        RATE_LIMIT_REJECTIONS.inc()
         raise HTTPException(429, "请求过于频繁，请稍后再试")
 
     # 获取或创建对话 ID

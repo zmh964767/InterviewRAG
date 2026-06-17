@@ -17,6 +17,8 @@ def _make_mock_provider():
     provider.chat.return_value = "mock answer"
     provider.chat_stream.return_value = iter(["mock ", "answer"])
     provider.check_health.return_value = "ok"
+    # 默认无 token 用量（避免 MagicMock 值被传给 prometheus observe）
+    provider.last_usage = None
     return provider
 
 
