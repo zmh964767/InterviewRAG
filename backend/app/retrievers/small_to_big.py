@@ -137,6 +137,7 @@ class SmallToBigRetriever:
                     "text": meta.get("parent_text", results["documents"][0][i]),
                     "category": meta.get("category", ""),
                     "source": meta.get("source", ""),
+                    # ChromaDB cosine distance ∈ [0,2]，转 similarity = 1 - distance ∈ [-1,1]
                     "score": round(1 - results["distances"][0][i], 4),
                     "strategy": "small_to_big",
                 }

@@ -10,7 +10,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - SKIP_RERANKER=1
+      # SKIP_RERANKER=1  # 如需跳过 BGE Reranker（节省内存/启动时间），取消注释此行
       - CHROMA_PERSIST_DIR=/app/data/chroma
       - SQLITE_DB_PATH=/app/data/interview.db
       - RAW_DATA_DIR=/app/data/raw

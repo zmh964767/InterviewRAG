@@ -6,6 +6,9 @@
 - 方案 C：混合检索 + Re-ranking
 - 方案 D：小块检索 + 大块生成
 - 方案 E：多路 Query 改写 + 混合检索
+
+使用 compute_retrieval_metrics（关键词重叠匹配）评估 Hit Rate@5 和 MRR，
+与 runner.py 的评估标准保持一致。
 """
 
 import asyncio
@@ -35,6 +38,7 @@ async def run_comparison():
     from app.retrievers.small_to_big import SmallToBigRetriever
     from app.rerankers.bge_reranker import BGEReranker
     from app.services.llm_service import LLMService
+    from evaluation.metrics import compute_retrieval_metrics
 
     settings = get_settings()
     vector_store = VectorStore()
@@ -48,6 +52,7 @@ async def run_comparison():
         llm_service,
         n=settings.multi_query_n,
         timeout_s=settings.multi_query_timeout_s,
+        prompt_variant=settings.query_rewrite_prompt_variant,
     )
     multi_query_retriever = MultiQueryRetriever(
         hybrid_retriever,
@@ -56,7 +61,7 @@ async def run_comparison():
     )
     multi_query_retriever.set_rewriter(rewriter)
 
-    # 3. 定义四种方案
+    # 3. 定义五种方案
     async def plan_a(question: str) -> dict:
         """方案 A：纯向量检索（baseline）"""
         results = vector_store.query(query_text=question, n_results=5)
@@ -99,47 +104,39 @@ async def run_comparison():
         "E_多路改写混合": plan_e,
     }
 
-    # 4. 运行对比
+    # 4. 运行对比（使用关键词重叠匹配，与 runner.py 一致）
     results = {}
 
     for plan_name, plan_func in plans.items():
         logger.info(f"运行方案: {plan_name}")
-        correct = 0
-        total = len(eval_items)
+        plan_results = []
 
         for item in eval_items:
             question = item["question"]
             try:
                 result = await plan_func(question)
                 sources = result.get("sources", [])
-
-                # 简单判断：检索结果中是否包含相关内容
-                if sources:
-                    top_text = sources[0].get("text", "") if isinstance(sources[0], dict) else str(sources[0])
-                    ground_truth = item["ground_truth"]
-                    # 关键词重叠检测
-                    overlap = sum(1 for word in ground_truth[:50] if word in top_text)
-                    if overlap > 5:
-                        correct += 1
+                texts = [s.get("text", "") if isinstance(s, dict) else str(s) for s in sources]
+                plan_results.append({
+                    "retrieved_texts": texts,
+                    "eval_question": question,
+                })
             except Exception as e:
                 logger.error(f"方案 {plan_name} 查询失败: {e}")
 
-        accuracy = correct / total if total > 0 else 0
-        results[plan_name] = {
-            "correct": correct,
-            "total": total,
-            "accuracy": round(accuracy, 4),
-        }
+        metrics = compute_retrieval_metrics(plan_results, k=5)
+        results[plan_name] = metrics
+        logger.info(f"  {plan_name}: HR@5={metrics['hit_rate@5']:.4f}, MRR={metrics['mrr']:.4f}")
 
     # 5. 输出对比报告
     print("\n" + "=" * 70)
-    print("检索策略对比实验")
+    print("检索策略对比实验（Hit Rate@5 + MRR）")
     print("=" * 70)
-    print(f"{'方案':<25} {'正确':>8} {'总数':>8} {'准确率':>10}")
+    print(f"{'方案':<25} {'HR@5':>10} {'MRR':>10}")
     print("-" * 70)
     for plan_name, result in results.items():
         print(
-            f"{plan_name:<25} {result['correct']:>8} {result['total']:>8} {result['accuracy']:>10.2%}"
+            f"{plan_name:<25} {result['hit_rate@5']:>10.4f} {result['mrr']:>10.4f}"
         )
     print("=" * 70)
 

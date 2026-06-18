@@ -11,10 +11,16 @@ from pathlib import Path
 REGRESSION_THRESHOLD = 0.05  # 5% 波动阈值
 
 
-def save_results(summary, comparison: dict, results_dir: Path) -> None:
+def save_results(summary, comparison: dict, results_dir: Path, tag: str | None = None) -> None:
     """保存结果到 latest.json + history/<timestamp>.json
 
     每次运行都会把上次的 latest.json 备份到 history/，再写新的 latest.json。
+
+    Args:
+        summary: EvalSummary 或 dict
+        comparison: 检索对比结果
+        results_dir: 结果目录
+        tag: 可选标记（如 "fast"），写入 payload 方便区分
     """
     from dataclasses import asdict, is_dataclass
     results_dir.mkdir(parents=True, exist_ok=True)
@@ -38,6 +44,8 @@ def save_results(summary, comparison: dict, results_dir: Path) -> None:
     items = summary_dict.get("results", [])
     payload = {
         "timestamp": ts,
+        "tag": tag,
+        "sample_size": len(items) if tag else None,
         "aggregated": summary_dict.get("aggregated", {}),
         "errors": summary_dict.get("errors", []),
         "total": len(items),

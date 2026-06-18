@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     multi_query_timeout_s: float = 5.0  # 改写 LLM 超时；超时回退原 query
     query_rewrite_prompt_variant: int = 1  # Prompt 变体 1..5（见 prompts/query_rewrite_v*.txt）
 
+    # Small-to-Big 检索策略
+    small_to_big_enabled: bool = False  # True 时用小块检索+大块生成替代默认混合检索
+
     # LLM 参数
     llm_model: str = "glm-4-flash"
     llm_temperature: float = 0.7
@@ -82,7 +85,7 @@ class Settings(BaseSettings):
 
     # 语义缓存
     cache_enabled: bool = True                    # 总开关：False 时跳过缓存
-    cache_similarity_threshold: float = 0.95      # 相似度阈值（0~1）
+    cache_similarity_threshold: float = 0.90      # 相似度阈值（0~1）；0.90 在准确率和命中率间取平衡
     cache_ttl_hours: int = 24                     # TTL（小时）
     cache_max_entries: int = 1000                 # LRU 上限
     cache_db_path: str = "./data/semantic_cache.db"  # SQLite 缓存库路径

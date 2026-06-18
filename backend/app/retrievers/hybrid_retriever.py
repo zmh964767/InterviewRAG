@@ -21,9 +21,21 @@ from app.core.vectorstore import VectorStore
 logger = structlog.get_logger(__name__)
 
 
+_STOPWORDS = frozenset({
+    '的', '了', '是', '在', '和', '与', '或', '等', '有', '对', '被', '把', '将',
+    '从', '到', '也', '都', '就', '才', '只', '但', '而', '如果', '因为', '所以',
+    '可以', '这个', '那个', '什么', '怎么', '如何', '为什么', '哪些', '哪个', '一个',
+    '一种', '一些', '通过', '进行', '使用', '能够', '需要', '应该', '已经', '正在',
+    '以及', '或者', '并且', '而且', '但是', '然而', '因此', '那么', '这样', '那样',
+    '这里', '那里', '其中', '之间', '之后', '之前', '关于', '对于', '来说', '而言',
+    '的话', '时候', '地方', '东西', '问题', '情况', '方面', '部分', '整个', '所有',
+    '任何', '每个', '某个', '这些', '那些', '比较', '非常', '可能', '不会', '没有',
+})
+
+
 def _tokenize(text: str) -> list[str]:
-    """jieba 分词，过滤空白 token"""
-    return [w for w in jieba.cut(text) if w.strip()]
+    """jieba 分词，过滤空白 token 和常见停用词"""
+    return [w for w in jieba.cut(text) if w.strip() and w not in _STOPWORDS]
 
 
 class HybridRetriever:

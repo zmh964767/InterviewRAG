@@ -18,16 +18,19 @@ def rag_service(monkeypatch):
         multi_query_enabled=False,
         multi_query_n=3,
         multi_query_timeout_s=5,
-        query_rewrite_prompt_variant="v1",
+        query_rewrite_prompt_variant=1,
         retrieval_top_k=5,
         rerank_top_k=3,
         memory_window=5,
+        small_to_big_enabled=False,
+        cache_enabled=False,
     )
     monkeypatch.setattr("app.services.rag_service.get_settings", lambda: mock_settings)
     # 用 lambda 返回 MagicMock 实例，避免 Python 3.13 的 InvalidSpecError
     # （MagicMock 作构造函数时，传入 MagicMock 参数会触发 spec 校验失败）
     monkeypatch.setattr("app.services.rag_service.VectorStore", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.HybridRetriever", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr("app.services.rag_service.SmallToBigRetriever", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.BGEReranker", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.LLMService", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.QueryRewriter", lambda *a, **kw: MagicMock())

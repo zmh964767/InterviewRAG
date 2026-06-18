@@ -16,6 +16,7 @@ from app.providers import create_embedding_provider
 from app.retrievers.hybrid_retriever import HybridRetriever
 from app.retrievers.multi_query_retriever import MultiQueryRetriever
 from app.retrievers.query_rewriter import QueryRewriter
+from app.retrievers.small_to_big import SmallToBigRetriever
 from app.rerankers.bge_reranker import BGEReranker
 from app.services.llm_service import LLMService
 
@@ -53,6 +54,7 @@ class RAGService:
         self.settings = get_settings()
         self.vector_store = VectorStore()
         self.hybrid_retriever = HybridRetriever(self.vector_store)
+        self.s2b_retriever = SmallToBigRetriever(self.vector_store)
         self.reranker = BGEReranker()
         self.llm_service = LLMService()
 
@@ -75,12 +77,21 @@ class RAGService:
         self.multi_query_retriever.set_rewriter(self.rewriter)
 
     async def _retrieve(self, question: str) -> list[dict]:
-        """统一检索入口：multi_query_enabled 时走多路，否则走单路混合检索。
+        """统一检索入口：small_to_big / multi_query / 单路混合检索。
 
         返回的是处理后的 sources（dict 形态，含 id/question/answer/score）。
         在 async 上下文里直接 await，避免嵌套 event loop。
         """
-        if self.settings.multi_query_enabled:
+        if self.settings.small_to_big_enabled:
+            async with track_stage("retrieval"):
+                loop = asyncio.get_running_loop()
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self.s2b_retriever.retrieve(
+                        query=question, top_k=self.settings.retrieval_top_k,
+                    ),
+                )
+        elif self.settings.multi_query_enabled:
             async with track_stage("retrieval"):
                 raw = await self.multi_query_retriever.aretrieve(
                     query=question, top_k=self.settings.retrieval_top_k
@@ -97,10 +108,14 @@ class RAGService:
                 )
         if self.reranker.is_available() and raw:
             async with track_stage("rerank"):
-                raw = self.reranker.rerank(
-                    query=question,
-                    documents=raw,
-                    top_k=self.settings.rerank_top_k,
+                loop = asyncio.get_running_loop()
+                raw = await loop.run_in_executor(
+                    None,
+                    lambda: self.reranker.rerank(
+                        query=question,
+                        documents=raw,
+                        top_k=self.settings.rerank_top_k,
+                    ),
                 )
         return self._process_results(raw)
 

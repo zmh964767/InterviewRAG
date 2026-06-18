@@ -43,19 +43,21 @@ def rag_with_cache(monkeypatch, mock_cache, mock_embed_provider):
         multi_query_enabled=False,
         multi_query_n=3,
         multi_query_timeout_s=5,
-        query_rewrite_prompt_variant="v1",
+        query_rewrite_prompt_variant=1,
         retrieval_top_k=5,
         rerank_top_k=3,
         memory_window=5,
         cache_enabled=True,
-        cache_similarity_threshold=0.95,
+        cache_similarity_threshold=0.90,
         cache_ttl_hours=24,
         cache_max_entries=100,
         cache_db_path=":memory:",
+        small_to_big_enabled=False,
     )
     monkeypatch.setattr("app.services.rag_service.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.services.rag_service.VectorStore", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.HybridRetriever", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr("app.services.rag_service.SmallToBigRetriever", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.BGEReranker", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.LLMService", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.QueryRewriter", lambda *a, **kw: MagicMock())
@@ -81,19 +83,21 @@ def rag_no_cache(monkeypatch, mock_embed_provider):
         multi_query_enabled=False,
         multi_query_n=3,
         multi_query_timeout_s=5,
-        query_rewrite_prompt_variant="v1",
+        query_rewrite_prompt_variant=1,
         retrieval_top_k=5,
         rerank_top_k=3,
         memory_window=5,
         cache_enabled=False,
-        cache_similarity_threshold=0.95,
+        cache_similarity_threshold=0.90,
         cache_ttl_hours=24,
         cache_max_entries=100,
         cache_db_path=":memory:",
+        small_to_big_enabled=False,
     )
     monkeypatch.setattr("app.services.rag_service.get_settings", lambda: mock_settings)
     monkeypatch.setattr("app.services.rag_service.VectorStore", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.HybridRetriever", lambda *a, **kw: MagicMock())
+    monkeypatch.setattr("app.services.rag_service.SmallToBigRetriever", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.BGEReranker", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.LLMService", lambda *a, **kw: MagicMock())
     monkeypatch.setattr("app.services.rag_service.QueryRewriter", lambda *a, **kw: MagicMock())

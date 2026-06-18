@@ -193,10 +193,17 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
     }
     successful_ids: list[str] = []
     errors: list[str] = []
+    error_details: dict[str, str] = {}
     answers_map: dict[str, str] = {}
 
     query_sem = asyncio.Semaphore(2)  # 智谱 60/min rate limit；2 路 RAG 查询并发
-    QUERY_TIMEOUT_S = 30.0  # 单题最长耗时（含检索 + LLM 生成）
+    # 自适应超时：exact 是知识库原题，单路检索快；paraphrase/complex 走完整 RAG 管线更慢
+    TIMEOUT_BY_TYPE = {
+        "exact": 15.0,
+        "paraphrase": 60.0,
+        "complex": 120.0,
+    }
+    DEFAULT_TIMEOUT = 60.0
     completed_count = 0  # 已完成查询数（用于实时进度回调）
 
     total = len(items)
@@ -208,6 +215,8 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
 
     async def query_one(idx: int, item: dict):
         nonlocal completed_count
+        item_type = item.get("type", "paraphrase")
+        timeout_s = TIMEOUT_BY_TYPE.get(item_type, DEFAULT_TIMEOUT)
         async with query_sem:
             try:
                 if item["question"] in exact_questions:
@@ -218,9 +227,12 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
                         lambda: hybrid_retriever.retrieve(query=item["question"], top_k=rag.settings.rerank_top_k),
                     )
                     if rag.reranker.is_available() and sources:
-                        sources = rag.reranker.rerank(
-                            query=item["question"], documents=sources,
-                            top_k=rag.settings.rerank_top_k,
+                        sources = await loop.run_in_executor(
+                            None,
+                            lambda: rag.reranker.rerank(
+                                query=item["question"], documents=sources,
+                                top_k=rag.settings.rerank_top_k,
+                            ),
                         )
                     sources = rag._process_results(sources)
                     context = rag._build_context(sources[: rag.settings.rerank_top_k])
@@ -235,7 +247,7 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
                 # 其他题型：走完整 rag.query（多路改写 + 混合检索 + 生成）
                 result = await asyncio.wait_for(
                     rag.query(item["question"]),
-                    timeout=QUERY_TIMEOUT_S,
+                    timeout=timeout_s,
                 )
                 rag_answer = result.get("answer", "")
                 rag_answer = rag_answer or "(空回答)"
@@ -244,7 +256,7 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
                     progress_callback(completed_count, total)
                 return item, rag_answer, result.get("sources", [])
             except asyncio.TimeoutError:
-                logger.warning(f"题目 {item.get('id', '?')} RAG 超时 (>={QUERY_TIMEOUT_S}s)，跳过")
+                logger.warning(f"题目 {item.get('id', '?')} RAG 超时 (>={timeout_s}s, type={item_type})，跳过")
                 completed_count += 1
                 if progress_callback:
                     progress_callback(completed_count, total)
@@ -263,7 +275,9 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
 
     for idx, (item, result_or_exc) in enumerate(zip(items, all_query_results)):
         if isinstance(result_or_exc, BaseException):
+            error_reason = f"{type(result_or_exc).__name__}: {result_or_exc}"
             errors.append(item.get("id", "unknown"))
+            error_details[item.get("id", "unknown")] = error_reason
         else:
             item_obj, rag_answer, sources = result_or_exc
             ragas_data["question"].append(item_obj["question"])
@@ -277,12 +291,11 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
             item_id = item_obj.get("id", item_obj["question"][:8])
             successful_ids.append(item_id)
             answers_map[item_id] = rag_answer
-        if progress_callback:
-            progress_callback(idx + 1, total)
+        # progress 已在 query_one 内部回调，此处不重复
 
     if not ragas_data["question"]:
         return EvalSummary(
-            results=[EvalResult(id=i, success=False, error="RAG 失败") for i in errors],
+            results=[EvalResult(id=i, success=False, error=error_details.get(i, "RAG 失败")) for i in errors],
             aggregated={},
             errors=errors,
             error_rate=1.0,
@@ -396,7 +409,7 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
     # Build id→question map for filling
     q_map = {item["id"]: item["question"] for item in items}
     results = [EvalResult(id=i, success=True, question=q_map.get(i, ""), answer=answers_map.get(i, ""), metrics=id_to_metrics.get(i, {})) for i in successful_ids]
-    results += [EvalResult(id=e, success=False) for e in errors]
+    results += [EvalResult(id=e, success=False, error=error_details.get(e, "unknown error")) for e in errors]
 
     # 保存 checkpoint（下次重启可跳过 phase 2）
     _save_ragas_checkpoint(aggregated, id_to_metrics, successful_ids)
