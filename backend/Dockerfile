@@ -5,6 +5,10 @@ ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# 阿里云 PyPI 镜像（国内加速）
+ENV PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/ \
+    PIP_TRUSTED_HOST=mirrors.aliyun.com
+
 # 编译依赖：gcc/g++/python3-dev 编译 chromadb/sentence-transformers
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \

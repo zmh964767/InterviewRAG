@@ -1,6 +1,8 @@
 # Stage 1: deps — 单独装依赖,利用 Docker 缓存
 FROM node:20-alpine AS deps
 WORKDIR /app
+# 淘宝 npm 镜像（国内加速）
+RUN npm config set registry https://registry.npmmirror.com
 COPY package.json package-lock.json* ./
 RUN npm ci
 
