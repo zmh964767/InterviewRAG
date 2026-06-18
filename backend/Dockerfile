@@ -45,6 +45,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 COPY app/ ./app/
+COPY evaluation/ ./evaluation/
 
 EXPOSE 8080
 
