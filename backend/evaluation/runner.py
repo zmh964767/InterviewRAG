@@ -352,6 +352,7 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
         raise
 
     eval_dataset = Dataset.from_dict(ragas_data)
+    id_to_metrics = {}  # 初始化，ragas 0.1.x 路径不产生逐题指标
     try:
         if ragas_v04:
             # RAGAS 0.4+：单题接口 + asyncio.gather 并发
@@ -395,7 +396,13 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
                 metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
                 llm=llm,
             )
-            aggregated = {k: float(v) for k, v in result.items()}
+            # ragas 0.2.x 返回 EvaluationResult，用 _repr_dict 获取聚合指标
+            if hasattr(result, '_repr_dict'):
+                aggregated = {k: float(v) for k, v in result._repr_dict.items()}
+            elif hasattr(result, 'items'):
+                aggregated = {k: float(v) for k, v in result.items()}
+            else:
+                aggregated = {}
     except Exception as e:
         logger.error(f"RAGAS 评估失败: {e}", exc_info=True)
         return EvalSummary(

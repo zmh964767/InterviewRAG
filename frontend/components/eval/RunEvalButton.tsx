@@ -7,17 +7,18 @@ interface RunEvalButtonProps {
   onComplete: () => void
 }
 
-type Mode = 'full' | 'ragas' | 'comparison' | 'sanity'
+type Mode = 'full' | 'ragas' | 'comparison' | 'sanity' | 'fast'
 
-const MODE_OPTIONS: { value: Mode; label: string }[] = [
-  { value: 'full', label: '完整评估' },
+const MODE_OPTIONS: { value: Mode; label: string; desc?: string }[] = [
+  { value: 'fast', label: '🚀 快速评估', desc: '抽样 20 题，约 3 分钟' },
+  { value: 'full', label: '完整评估', desc: '全量 254 题，约 30 分钟' },
   { value: 'ragas', label: '仅 RAGAS' },
   { value: 'comparison', label: '仅策略对比' },
   { value: 'sanity', label: '冒烟测试' },
 ]
 
 export function RunEvalButton({ onComplete }: RunEvalButtonProps) {
-  const [mode, setMode] = useState<Mode>('full')
+  const [mode, setMode] = useState<Mode>('fast')
   const [running, setRunning] = useState(false)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [error, setError] = useState<string | null>(null)

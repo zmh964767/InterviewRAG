@@ -22,6 +22,9 @@ services:
       - SQLITE_DB_PATH=/app/data/interview.db
       - RAW_DATA_DIR=/app/data/raw
       - PROCESSED_DATA_DIR=/app/data/processed
+      # ragas 0.2.x 内部需要 OPENAI_API_KEY，指向智谱兼容端点
+      - OPENAI_API_KEY=${ZHIPU_API_KEY}
+      - OPENAI_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
       # 可选: 跳过 BGE Reranker (节省 ~1GB 内存, 加快启动)
       # - SKIP_RERANKER=1
     volumes:

@@ -83,13 +83,13 @@ async def eval_detail(ts: str | None = None):
 
 
 class RunEvalRequest(BaseModel):
-    mode: str = "full"  # "full" | "ragas" | "comparison" | "sanity"
+    mode: str = "full"  # "full" | "ragas" | "comparison" | "sanity" | "fast"
 
 
 @router.post("/eval/run")
 async def run_eval_endpoint(request: RunEvalRequest):
     """异步触发评估任务（限流：已有 running 时拒绝）"""
-    if request.mode not in ("full", "ragas", "comparison", "sanity"):
+    if request.mode not in ("full", "ragas", "comparison", "sanity", "fast"):
         raise HTTPException(status_code=400, detail=f"不支持的 mode: {request.mode}")
 
     if task_store.list_active():
@@ -323,7 +323,8 @@ async def _run_eval_task(task_id: str, mode: str) -> None:
     """后台执行评估任务"""
     task_store.update(task_id, status="running")
     try:
-        from evaluation.run import load_eval_dataset
+        import threading
+        from evaluation.run import load_eval_dataset, stratified_sample
         from evaluation.runner import run_ragas_evaluation, run_comparison_evaluation, EvalSummary
         from evaluation.regression import save_results
 
@@ -331,18 +332,43 @@ async def _run_eval_task(task_id: str, mode: str) -> None:
         if not items:
             raise RuntimeError("评估数据集为空")
 
+        # fast 模式：分层抽样 20 题
+        is_fast = mode == "fast"
+        if is_fast:
+            items = stratified_sample(items, 20)
+            logger.info(f"[eval] 快速模式：分层抽样 {len(items)} 题")
+
         # 跑 RAGAS（如需要）
-        if mode in ("full", "ragas", "sanity"):
+        # ragas 0.2.x 与 uvloop 不兼容，需要在独立线程的标准 asyncio 事件循环中运行
+        if mode in ("full", "ragas", "sanity", "fast"):
             def _on_progress(done, total):
                 task_store.update(task_id, total=total, done=done)
             logger.info(f"[eval] 开始 RAG 查询，{len(items)} 题...")
-            summary = await run_ragas_evaluation(items, progress_callback=_on_progress)
+
+            def _run_ragas_in_thread():
+                """在独立线程中运行 ragas（避免 uvloop 兼容问题）"""
+                import asyncio as _asyncio
+                # 强制使用标准事件循环，不用 uvloop
+                _asyncio.set_event_loop_policy(_asyncio.DefaultEventLoopPolicy())
+                loop = _asyncio.new_event_loop()
+                _asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        run_ragas_evaluation(items, progress_callback=_on_progress)
+                    )
+                finally:
+                    loop.close()
+
+            # 用 ThreadPoolExecutor 确保线程完全独立
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                summary = await asyncio.get_running_loop().run_in_executor(pool, _run_ragas_in_thread)
             logger.info(f"[eval] RAGAS 评估完成，aggregated={summary.aggregated}")
         else:
             summary = EvalSummary(results=[], aggregated={}, errors=[], error_rate=0)
 
         # 跑 comparison（如需要）
-        if mode in ("full", "comparison"):
+        if mode in ("full", "comparison", "fast"):
             logger.info(f"[eval] 开始策略对比...")
             comparison = await run_comparison_evaluation(items)
             logger.info(f"[eval] 策略对比完成")
@@ -351,7 +377,7 @@ async def _run_eval_task(task_id: str, mode: str) -> None:
 
         # 保存结果
         logger.info(f"[eval] 保存结果...")
-        save_results(summary=summary, comparison=comparison, results_dir=RESULTS_DIR)
+        save_results(summary=summary, comparison=comparison, results_dir=RESULTS_DIR, tag="fast" if is_fast else None)
         logger.info(f"[eval] 保存完成")
 
         task_store.update(

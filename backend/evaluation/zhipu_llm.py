@@ -1,9 +1,8 @@
 """智谱 LLM 适配层
 
-RAGAS 0.4.3 collections metrics 要求用 llm_factory + InstructorLLM，
-不接受 langchain ChatOpenAI。因此：
-- ZhipuOpenAIClient: 用 openai.OpenAI 指向智谱兼容端点
-- create_zhipu_llm(): 返回 llm_factory(llm, client) 的 InstructorLLM 实例
+兼容 ragas 0.2.x 和 0.4+：
+- ragas 0.4+: llm_factory(model, client=...) + InstructorLLM
+- ragas 0.2.x: langchain ChatOpenAI
 """
 
 import logging
@@ -57,24 +56,54 @@ def create_zhipu_client(async_client: bool = True):
     reraise=True,
 )
 def create_zhipu_llm():
-    """创建智谱 LLM 实例（RAGAS 0.4+ InstructorLLM 接口）
+    """创建智谱 LLM 实例（兼容 ragas 0.2.x 和 0.4+）
 
     Returns:
-        ragas.llms.base.BaseRagasLLM 实例，可直接传给 RAGAS metrics
+        ragas llm 实例
 
     Raises:
         ZhipuLLMUnavailable: 配置缺失
     """
+    settings = get_settings()
+    if not settings.zhipu_api_key:
+        raise ZhipuLLMUnavailable("未配置 ZHIPU_API_KEY，请在 .env 中设置")
+
+    # 优先尝试 ragas 0.4+ 的 llm_factory(client=...)
     try:
         from ragas.llms import llm_factory
+        client = create_zhipu_client(async_client=True)
+        llm = llm_factory(settings.llm_model, client=client)
+        logger.info("智谱 LLM 已初始化（ragas 0.4+ 模式，%s）", settings.llm_model)
+        return llm
+    except TypeError:
+        pass  # ragas 0.2.x 不支持 client 参数，走下面的 fallback
+
+    # ragas 0.2.x fallback：用 langchain ChatOpenAI
+    try:
+        from langchain_openai import ChatOpenAI
+        from ragas.llms import LangchainLLMWrapper
     except ImportError as e:
-        raise ZhipuLLMUnavailable(
-            "缺少 ragas 包，请运行: pip install ragas"
-        ) from e
+        raise ZhipuLLMUnavailable("缺少 langchain-openai 或 ragas 包") from e
 
-    client = create_zhipu_client()
-    settings = get_settings()
+    # Monkey-patch: 修复 ragas 的 temperature 与智谱 API 不兼容问题
+    # 智谱 API 限制 temperature 最多 2 位小数，ragas 默认用 1e-8
+    import functools
+    _original_agenerate = LangchainLLMWrapper.agenerate_text
+    @functools.wraps(_original_agenerate)
+    async def _fixed_agenerate(self, prompt, n=1, temperature=None, **kwargs):
+        if temperature is not None:
+            temperature = round(float(temperature), 2)
+        else:
+            temperature = 0.0 if n == 1 else 0.30
+        return await _original_agenerate(self, prompt, n=n, temperature=temperature, **kwargs)
+    LangchainLLMWrapper.agenerate_text = _fixed_agenerate
 
-    llm = llm_factory(settings.llm_model, client=client)
-    logger.info(f"智谱 LLM 已初始化（{settings.llm_model}）")
+    llm = ChatOpenAI(
+        model=settings.llm_model,
+        api_key=settings.zhipu_api_key,
+        base_url="https://open.bigmodel.cn/api/paas/v4/",
+        max_tokens=8192,
+        temperature=0,
+    )
+    logger.info("智谱 LLM 已初始化（ragas 0.2.x 模式，%s）", settings.llm_model)
     return llm
