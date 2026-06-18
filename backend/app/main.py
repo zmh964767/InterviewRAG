@@ -40,6 +40,13 @@ async def lifespan(app: FastAPI):
     settings = get_settings()
     logger.info("app_startup", chroma_path=settings.chroma_persist_dir)
 
+    # 安全检查：cookie_secure=False 时，非 localhost 环境警告
+    if not settings.cookie_secure:
+        logger.warning(
+            "cookie_secure_disabled",
+            hint="生产环境请设置 COOKIE_SECURE=True 以防止 cookie 明文传输",
+        )
+
     # 统一初始化共享实例
     db = Database()
     db_module.set_db(db)   # core/db.py 共享同一实例

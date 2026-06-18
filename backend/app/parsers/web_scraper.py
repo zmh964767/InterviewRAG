@@ -24,8 +24,8 @@ HEADERS = {
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 }
 
-# 禁止的协议
-BLOCKED_SCHEMES = {"file", "ftp", "gopher", "dict", "ldap"}
+# 响应体大小限制（防止恶意 URL 返回超大响应导致 OOM）
+MAX_RESPONSE_BYTES = 5 * 1024 * 1024  # 5MB
 
 
 def _is_private_ip(ip_str: str) -> bool:
@@ -90,10 +90,28 @@ def validate_url(url: str) -> None:
 
 
 def _fetch(url: str) -> str:
-    """同步 HTTP GET（在线程中调用）"""
-    resp = requests.get(url, headers=HEADERS, timeout=10)
+    """同步 HTTP GET（在线程中调用）
+
+    流式读取响应体，超过 MAX_RESPONSE_BYTES 时中断，防止 OOM。
+    """
+    resp = requests.get(url, headers=HEADERS, timeout=10, stream=True)
     resp.raise_for_status()
-    return resp.text
+
+    content_length = resp.headers.get("Content-Length")
+    if content_length and int(content_length) > MAX_RESPONSE_BYTES:
+        resp.close()
+        raise ValueError(f"响应体过大: {int(content_length)} bytes（上限 {MAX_RESPONSE_BYTES}）")
+
+    chunks: list[bytes] = []
+    total = 0
+    for chunk in resp.iter_content(chunk_size=8192):
+        total += len(chunk)
+        if total > MAX_RESPONSE_BYTES:
+            resp.close()
+            raise ValueError(f"响应体超过 {MAX_RESPONSE_BYTES} bytes 限制，已中断")
+        chunks.append(chunk)
+
+    return b"".join(chunks).decode(resp.encoding or "utf-8", errors="replace")
 
 
 async def scrape_juejin_article(url: str, category: str = "面试") -> list[Question]:
