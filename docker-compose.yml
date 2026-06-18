@@ -34,14 +34,17 @@ services:
       start_period: 20s                       # 首次启动给 20s 初始化时间
 
   frontend:
-    build: ./frontend                         # 用 frontend/Dockerfile 构建
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:8080   # 构建时写入 Next.js rewrites
     container_name: interviewrag-frontend
     restart: unless-stopped
     ports:
       - "3000:3000"                           # Next.js 前端端口
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080   # 浏览器端 API 地址
-      - BACKEND_URL=http://backend:8080             # 容器间内部通信地址
+      # NEXT_PUBLIC_API_URL 不设置 → 浏览器用相对路径 /api/query → Next.js rewrites 代理到后端
+      - BACKEND_URL=http://backend:8080             # 容器间内部通信地址（Next.js rewrites 用）
     depends_on:
       backend:
         condition: service_healthy            # 后端健康后才启动前端
