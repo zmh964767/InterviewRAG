@@ -53,6 +53,11 @@ backend/evaluation/_ragas_checkpoint*.json
 # Sweep 调优结果（本地实验产物，不公开）
 backend/evaluation/results/sweep/
 
+# 评估运行结果（每次评估都会变，不提交）
+backend/evaluation/results/latest.json
+backend/evaluation/results/latest_summary.json
+backend/evaluation/results/history/
+
 # OS
 .DS_Store
 Thumbs.db
