@@ -391,10 +391,14 @@ async def run_ragas_evaluation(items: list[dict], progress_callback=None) -> Eva
         else:
             # RAGAS 0.1.x 批量接口
             from ragas import evaluate
+            # 为 ragas 创建智谱 embedding（answer_relevancy 需要）
+            from evaluation.zhipu_llm import create_zhipu_embeddings
+            embeddings = create_zhipu_embeddings()
             result = evaluate(
                 dataset=eval_dataset,
                 metrics=[faithfulness, answer_relevancy, context_precision, context_recall],
                 llm=llm,
+                embeddings=embeddings,
             )
             # ragas 0.2.x 返回 EvaluationResult，用 _repr_dict 获取聚合指标
             if hasattr(result, '_repr_dict'):

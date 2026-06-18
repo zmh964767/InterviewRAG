@@ -107,3 +107,27 @@ def create_zhipu_llm():
     )
     logger.info("智谱 LLM 已初始化（ragas 0.2.x 模式，%s）", settings.llm_model)
     return llm
+
+
+def create_zhipu_embeddings():
+    """创建智谱 Embeddings 实例（兼容 ragas 0.2.x）
+
+    Returns:
+        langchain OpenAIEmbeddings 实例，指向智谱兼容端点
+    """
+    settings = get_settings()
+    if not settings.zhipu_api_key:
+        raise ZhipuLLMUnavailable("未配置 ZHIPU_API_KEY，请在 .env 中设置")
+
+    try:
+        from langchain_openai import OpenAIEmbeddings
+    except ImportError as e:
+        raise ZhipuLLMUnavailable("缺少 langchain-openai 包") from e
+
+    emb = OpenAIEmbeddings(
+        model=settings.embedding_model,
+        openai_api_key=settings.zhipu_api_key,
+        openai_api_base="https://open.bigmodel.cn/api/paas/v4/",
+    )
+    logger.info("智谱 Embeddings 已初始化（%s）", settings.embedding_model)
+    return emb
