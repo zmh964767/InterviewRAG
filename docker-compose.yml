@@ -1,49 +1,61 @@
-# Compose V2 不需要 version 字段(已废弃,填了反而警告)
+# InterviewRAG Docker Compose
+# 启动: docker compose up -d
+# 停止: docker compose down (保留数据)
+# 清空: docker compose down -v (删除数据卷)
 
 services:
+  # ============================================================
+  # 核心应用 (2 个)
+  # ============================================================
+
   backend:
-    build: ./backend
+    build: ./backend                          # 用 backend/Dockerfile 构建
     container_name: interviewrag-backend
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "8080:8080"                           # FastAPI API 端口
     env_file:
-      - ./backend/.env
+      - ./backend/.env                        # 读取 .env (ZHIPU_API_KEY 等)
     environment:
-      # SKIP_RERANKER=1  # 如需跳过 BGE Reranker（节省内存/启动时间），取消注释此行
+      # 覆盖 .env 中的路径 (容器内路径 vs 宿主机路径)
       - CHROMA_PERSIST_DIR=/app/data/chroma
       - SQLITE_DB_PATH=/app/data/interview.db
       - RAW_DATA_DIR=/app/data/raw
       - PROCESSED_DATA_DIR=/app/data/processed
+      # 可选: 跳过 BGE Reranker (节省 ~1GB 内存, 加快启动)
+      # - SKIP_RERANKER=1
     volumes:
-      - interviewrag_data:/app/data
+      - interviewrag_data:/app/data           # 持久化: SQLite 数据库 + ChromaDB 向量索引
     healthcheck:
-      # /api/ping 不调 LLM（避免智谱 API 重试 3 次把 healthcheck 卡到 30s+）
       test: ["CMD", "curl", "-f", "--max-time", "3", "http://localhost:8080/api/ping"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 20s
+      start_period: 20s                       # 首次启动给 20s 初始化时间
 
   frontend:
-    build: ./frontend
+    build: ./frontend                         # 用 frontend/Dockerfile 构建
     container_name: interviewrag-frontend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3000:3000"                           # Next.js 前端端口
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8080
-      - BACKEND_URL=http://backend:8080
+      - NEXT_PUBLIC_API_URL=http://localhost:8080   # 浏览器端 API 地址
+      - BACKEND_URL=http://backend:8080             # 容器间内部通信地址
     depends_on:
       backend:
-        condition: service_healthy
+        condition: service_healthy            # 后端健康后才启动前端
+
+  # ============================================================
+  # 可观测性栈 (3 个) — Prometheus + Loki + Grafana
+  # ============================================================
 
   prometheus:
-    image: prom/prometheus:v2.53.0
+    image: prom/prometheus:v2.53.0            # 指标采集 (抓取 /metrics 端点)
     container_name: interviewrag-prometheus
     restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "9090:9090"                           # Prometheus Web UI
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
@@ -51,29 +63,32 @@ services:
         condition: service_healthy
 
   loki:
-    image: grafana/loki:3.0.0
+    image: grafana/loki:3.0.0                 # 日志聚合 (接收 structlog JSON 日志)
     container_name: interviewrag-loki
     restart: unless-stopped
     ports:
-      - "3100:3100"
+      - "3100:3100"                           # Loki API (Grafana 连接用)
     command: -config.file=/etc/loki/local-config.yaml
 
   grafana:
-    image: grafana/grafana:11.1.0
+    image: grafana/grafana:11.1.0             # 可视化面板 (预置 InterviewRAG 仪表盘)
     container_name: interviewrag-grafana
     restart: unless-stopped
     ports:
-      - "3001:3000"
+      - "3001:3000"                           # Grafana Web UI (注意: 容器内 3000, 宿主机 3001)
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_SECURITY_ADMIN_PASSWORD=admin      # Grafana 管理员密码
+      - GF_AUTH_ANONYMOUS_ENABLED=true        # 允许匿名查看 (无需登录即可看面板)
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro  # 自动配置数据源
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro  # 预置仪表盘 JSON
     depends_on:
-      - prometheus
-      - loki
+      - prometheus                            # 需要 Prometheus 作为数据源
+      - loki                                  # 需要 Loki 作为日志数据源
 
+# ============================================================
+# 数据卷
+# ============================================================
 volumes:
-  interviewrag_data:
+  interviewrag_data:                          # 后端持久化数据 (SQLite + ChromaDB)
